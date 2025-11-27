@@ -7,10 +7,10 @@ export enum Rarity {
 }
 
 export const RARITY_WEIGHTS: Record<Rarity, number> = {
-  [Rarity.Common]: 40,
-  [Rarity.Uncommon]: 34,
-  [Rarity.Rare]: 20,
-  [Rarity.Epic]: 5,
+  [Rarity.Common]: 67,
+  [Rarity.Uncommon]: 20,
+  [Rarity.Rare]: 10,
+  [Rarity.Epic]: 2,
   [Rarity.Legendary]: 1,
 };
 

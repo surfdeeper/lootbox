@@ -2,6 +2,20 @@ import { useState, useEffect } from "react";
 import { generateLoot } from "./generator";
 import { LootItem, RARITY_EMOJIS, RARITY_COLORS, Rarity } from "./types";
 
+function addXp(currentXp: number, currentLevel: number, amount: number): { xp: number; level: number } {
+  let newXp = currentXp + amount;
+  let newLevel = currentLevel;
+  let xpForNextLevel = newLevel * 100;
+
+  while (newXp >= xpForNextLevel) {
+    newXp -= xpForNextLevel;
+    newLevel++;
+    xpForNextLevel = newLevel * 100;
+  }
+
+  return { xp: newXp, level: newLevel };
+}
+
 function LootItemCard({ item, compact = false, onView }: { item: LootItem; compact?: boolean; onView?: () => void }) {
   const emoji = RARITY_EMOJIS[item.rarity];
   const color = RARITY_COLORS[item.rarity];
@@ -100,6 +114,49 @@ function formatStatName(name: string): string {
 
 type RarityFilter = "all" | Rarity;
 
+type ShopSection = "weapons" | "armor" | "consumables" | "materials" | "specials";
+
+function Shop({ onClose }: { onClose: () => void }) {
+  const [activeSection, setActiveSection] = useState<ShopSection>("weapons");
+
+  const sections: { id: ShopSection; label: string; emoji: string }[] = [
+    { id: "weapons", label: "Weapons", emoji: "⚔️" },
+    { id: "armor", label: "Armor", emoji: "🛡️" },
+    { id: "consumables", label: "Consumables", emoji: "🧪" },
+    { id: "materials", label: "Materials", emoji: "💎" },
+    { id: "specials", label: "Specials", emoji: "✨" },
+  ];
+
+  return (
+    <div className="shop-overlay">
+      <div className="shop-modal">
+        <button className="shop-close-btn" onClick={onClose}>
+          ✕
+        </button>
+        <div className="shop-tabs">
+          {sections.map((section) => (
+            <button
+              key={section.id}
+              className={`shop-tab ${activeSection === section.id ? "active" : ""}`}
+              onClick={() => setActiveSection(section.id)}
+            >
+              <span className="shop-tab-emoji">{section.emoji}</span>
+              <span className="shop-tab-label">{section.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="shop-content">
+          <h2 className="shop-section-title">
+            {sections.find((s) => s.id === activeSection)?.emoji}{" "}
+            {sections.find((s) => s.id === activeSection)?.label}
+          </h2>
+          <p className="shop-empty">Coming soon...</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Inventory({
   items,
   onClose,
@@ -188,12 +245,35 @@ function Inventory({
   );
 }
 
+function XPBar({ xp, level }: { xp: number; level: number }) {
+  const xpForNextLevel = level * 100;
+  const progress = (xp / xpForNextLevel) * 100;
+
+  return (
+    <div className="xp-bar-container">
+      <div className="xp-bar-header">
+        <span className="xp-level">Level {level}</span>
+        <span className="xp-text">{xp} / {xpForNextLevel} XP</span>
+      </div>
+      <div className="xp-bar-track">
+        <div
+          className="xp-bar-fill"
+          style={{ width: `${Math.min(progress, 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [loot, setLoot] = useState<LootItem | null>(null);
   const [inventory, setInventory] = useState<LootItem[]>([]);
   const [isOpening, setIsOpening] = useState(false);
   const [chestState, setChestState] = useState<"closed" | "opening" | "open">("closed");
   const [showInventory, setShowInventory] = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [xp, setXp] = useState(0);
+  const [level, setLevel] = useState(1);
 
   const openChest = () => {
     if (isOpening) return;
@@ -208,6 +288,18 @@ export default function App() {
       setLoot(newLoot);
       setInventory((prev) => [...prev, newLoot]);
 
+      // Award XP based on rarity
+      const xpRewards: Record<Rarity, number> = {
+        [Rarity.Common]: 1,
+        [Rarity.Uncommon]: 3,
+        [Rarity.Rare]: 8,
+        [Rarity.Epic]: 35,
+        [Rarity.Legendary]: 125,
+      };
+      const { xp: newXp, level: newLevel } = addXp(xp, level, xpRewards[newLoot.rarity]);
+      setXp(newXp);
+      setLevel(newLevel);
+
       setTimeout(() => {
         setChestState("closed");
         setIsOpening(false);
@@ -218,18 +310,19 @@ export default function App() {
   // Spacebar to open chest
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !showInventory) {
+      if (e.code === "Space" && !showInventory && !showShop) {
         e.preventDefault();
         openChest();
       }
-      if (e.code === "Escape" && showInventory) {
-        setShowInventory(false);
+      if (e.code === "Escape") {
+        if (showInventory) setShowInventory(false);
+        if (showShop) setShowShop(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpening, showInventory]);
+  }, [isOpening, showInventory, showShop]);
 
   const getChestEmoji = () => {
     if (chestState === "open") return "📭";
@@ -238,7 +331,13 @@ export default function App() {
 
   return (
     <div className="app">
+      <XPBar xp={xp} level={level} />
+
       <h1 className="title">Lootbox</h1>
+
+      <button className="shop-btn" onClick={() => setShowShop(true)}>
+        🛒 Shop
+      </button>
 
       <button className="inventory-btn" onClick={() => setShowInventory(true)}>
         🎒 Inventory ({inventory.length})
@@ -256,6 +355,8 @@ export default function App() {
       {showInventory && (
         <Inventory items={inventory} onClose={() => setShowInventory(false)} />
       )}
+
+      {showShop && <Shop onClose={() => setShowShop(false)} />}
     </div>
   );
 }

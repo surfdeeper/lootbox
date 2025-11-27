@@ -197,7 +197,7 @@ body {
 /* Inventory Button */
 .inventory-btn {
   position: fixed;
-  top: 1.5rem;
+  bottom: 1.5rem;
   right: 1.5rem;
   padding: 0.75rem 1.25rem;
   font-size: 1rem;
@@ -560,4 +560,184 @@ body {
   text-align: right;
   font-weight: bold;
   font-size: 0.95rem;
+}
+
+/* XP Bar */
+.xp-bar-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 0.75rem 1.5rem;
+  z-index: 100;
+}
+
+.xp-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.xp-level {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #ffd700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.xp-text {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.xp-bar-track {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.xp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffd700 0%, #ffec8b 50%, #ffd700 100%);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+/* Shop Button */
+.shop-btn {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #ff8000;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 100;
+}
+
+.shop-btn:hover {
+  background: rgba(255, 128, 0, 0.3);
+  transform: scale(1.05);
+}
+
+/* Shop Modal */
+.shop-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  display: flex;
+  flex-direction: column;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.shop-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.shop-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  color: #888;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shop-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 0, 0, 0.3);
+  border-color: rgba(255, 0, 0, 0.5);
+}
+
+.shop-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.5rem 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 2px solid rgba(255, 128, 0, 0.3);
+}
+
+.shop-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #aaa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.shop-tab:hover {
+  background: rgba(255, 128, 0, 0.1);
+  border-color: rgba(255, 128, 0, 0.3);
+  color: #fff;
+}
+
+.shop-tab.active {
+  background: rgba(255, 128, 0, 0.2);
+  border-color: #ff8000;
+  color: #fff;
+  box-shadow: 0 0 20px rgba(255, 128, 0, 0.3);
+}
+
+.shop-tab-emoji {
+  font-size: 2rem;
+}
+
+.shop-tab-label {
+  font-size: 0.9rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.shop-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.shop-section-title {
+  font-size: 2rem;
+  color: #ff8000;
+  text-shadow: 0 0 20px rgba(255, 128, 0, 0.5);
+  margin-bottom: 1rem;
+}
+
+.shop-empty {
+  font-size: 1.2rem;
+  color: #666;
+  font-style: italic;
 }

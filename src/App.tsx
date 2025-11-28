@@ -2,18 +2,27 @@ import { useState, useEffect } from "react";
 import { generateLoot } from "./generator";
 import { LootItem, RARITY_EMOJIS, RARITY_COLORS, Rarity } from "./types";
 
-function addXp(currentXp: number, currentLevel: number, amount: number): { xp: number; level: number } {
+function getLevelUpCoinReward(level: number): number {
+  // Level 1->2: 2 coins, 2->3: 5 coins, 3->4: 10, 4->5: 15, 5->6: 20, etc.
+  if (level === 1) return 2;
+  if (level === 2) return 5;
+  return (level - 1) * 5;
+}
+
+function addXp(currentXp: number, currentLevel: number, amount: number): { xp: number; level: number; coinReward: number } {
   let newXp = currentXp + amount;
   let newLevel = currentLevel;
   let xpForNextLevel = newLevel * 100;
+  let coinReward = 0;
 
   while (newXp >= xpForNextLevel) {
     newXp -= xpForNextLevel;
+    coinReward += getLevelUpCoinReward(newLevel);
     newLevel++;
     xpForNextLevel = newLevel * 100;
   }
 
-  return { xp: newXp, level: newLevel };
+  return { xp: newXp, level: newLevel, coinReward };
 }
 
 function LootItemCard({ item, compact = false, onView }: { item: LootItem; compact?: boolean; onView?: () => void }) {
@@ -114,25 +123,61 @@ function formatStatName(name: string): string {
 
 type RarityFilter = "all" | Rarity;
 
-type ShopSection = "weapons" | "armor" | "consumables" | "materials" | "specials";
+type ShopSection = "weapons" | "armor" | "consumables" | "boxes" | "specials";
 
-function Shop({ onClose }: { onClose: () => void }) {
+interface BoxUpgrade {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  emoji: string;
+}
+
+const BOX_UPGRADES: BoxUpgrade[] = [
+  { id: "bronze", name: "Bronze Box", description: "Slightly better odds for uncommon items", cost: 50, emoji: "🥉" },
+  { id: "silver", name: "Silver Box", description: "Better odds for rare items", cost: 200, emoji: "🥈" },
+  { id: "gold", name: "Gold Box", description: "Much better odds for epic and legendary items", cost: 500, emoji: "🥇" },
+];
+
+function Shop({ onClose, coins, onPurchase }: { onClose: () => void; coins: number; onPurchase: (cost: number, itemId: string) => void }) {
   const [activeSection, setActiveSection] = useState<ShopSection>("weapons");
 
   const sections: { id: ShopSection; label: string; emoji: string }[] = [
     { id: "weapons", label: "Weapons", emoji: "⚔️" },
     { id: "armor", label: "Armor", emoji: "🛡️" },
     { id: "consumables", label: "Consumables", emoji: "🧪" },
-    { id: "materials", label: "Materials", emoji: "💎" },
+    { id: "boxes", label: "Boxes", emoji: "📦" },
     { id: "specials", label: "Specials", emoji: "✨" },
   ];
+
+  const renderBoxesContent = () => (
+    <div className="shop-items-grid">
+      {BOX_UPGRADES.map((box) => (
+        <div key={box.id} className="shop-item-card">
+          <span className="shop-item-emoji">{box.emoji}</span>
+          <h3 className="shop-item-name">{box.name}</h3>
+          <p className="shop-item-description">{box.description}</p>
+          <button
+            className={`shop-buy-btn ${coins < box.cost ? "disabled" : ""}`}
+            onClick={() => coins >= box.cost && onPurchase(box.cost, box.id)}
+            disabled={coins < box.cost}
+          >
+            💰 {box.cost} Coins
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="shop-overlay">
       <div className="shop-modal">
-        <button className="shop-close-btn" onClick={onClose}>
-          ✕
-        </button>
+        <div className="shop-header">
+          <span className="shop-coins">💰 {Math.round(coins * 10) / 10} Coins</span>
+          <button className="shop-close-btn" onClick={onClose}>
+            ✕
+          </button>
+        </div>
         <div className="shop-tabs">
           {sections.map((section) => (
             <button
@@ -150,7 +195,7 @@ function Shop({ onClose }: { onClose: () => void }) {
             {sections.find((s) => s.id === activeSection)?.emoji}{" "}
             {sections.find((s) => s.id === activeSection)?.label}
           </h2>
-          <p className="shop-empty">Coming soon...</p>
+          {activeSection === "boxes" ? renderBoxesContent() : <p className="shop-empty">Coming soon...</p>}
         </div>
       </div>
     </div>
@@ -245,7 +290,7 @@ function Inventory({
   );
 }
 
-function XPBar({ xp, level }: { xp: number; level: number }) {
+function XPBar({ xp, level, coins }: { xp: number; level: number; coins: number }) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
 
@@ -261,6 +306,9 @@ function XPBar({ xp, level }: { xp: number; level: number }) {
           style={{ width: `${Math.min(progress, 100)}%` }}
         />
       </div>
+      <div className="coins-display">
+        <span className="coins-text">💰 {Math.round(coins * 10) / 10} Coins</span>
+      </div>
     </div>
   );
 }
@@ -274,6 +322,7 @@ export default function App() {
   const [showShop, setShowShop] = useState(false);
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
+  const [coins, setCoins] = useState(0);
 
   const openChest = () => {
     if (isOpening) return;
@@ -296,9 +345,19 @@ export default function App() {
         [Rarity.Epic]: 35,
         [Rarity.Legendary]: 125,
       };
-      const { xp: newXp, level: newLevel } = addXp(xp, level, xpRewards[newLoot.rarity]);
+      const { xp: newXp, level: newLevel, coinReward: levelUpCoins } = addXp(xp, level, xpRewards[newLoot.rarity]);
       setXp(newXp);
       setLevel(newLevel);
+
+      // Award coins based on rarity + level up bonus
+      const coinRewards: Record<Rarity, number> = {
+        [Rarity.Common]: 0.1,
+        [Rarity.Uncommon]: 0.3,
+        [Rarity.Rare]: 1,
+        [Rarity.Epic]: 2.5,
+        [Rarity.Legendary]: 10,
+      };
+      setCoins((prev) => prev + coinRewards[newLoot.rarity] + levelUpCoins);
 
       setTimeout(() => {
         setChestState("closed");
@@ -331,7 +390,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <XPBar xp={xp} level={level} />
+      <XPBar xp={xp} level={level} coins={coins} />
 
       <h1 className="title">Lootbox</h1>
 
@@ -356,7 +415,17 @@ export default function App() {
         <Inventory items={inventory} onClose={() => setShowInventory(false)} />
       )}
 
-      {showShop && <Shop onClose={() => setShowShop(false)} />}
+      {showShop && (
+        <Shop
+          onClose={() => setShowShop(false)}
+          coins={coins}
+          onPurchase={(cost, itemId) => {
+            setCoins((prev) => prev - cost);
+            // TODO: Apply box upgrade effect
+            console.log(`Purchased ${itemId}`);
+          }}
+        />
+      )}
     </div>
   );
 }

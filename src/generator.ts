@@ -43,8 +43,8 @@ function weightedRandomSelect<T>(items: T[], weights: number[]): T {
   return items[items.length - 1];
 }
 
-function selectGlobalRarity(): Rarity {
-  const weights = ALL_RARITIES.map((r) => RARITY_WEIGHTS[r]);
+function selectGlobalRarity(customWeights?: Record<Rarity, number>): Rarity {
+  const weights = ALL_RARITIES.map((r) => customWeights?.[r] ?? RARITY_WEIGHTS[r]);
   return weightedRandomSelect(ALL_RARITIES, weights);
 }
 
@@ -82,10 +82,11 @@ function applyRarityPrefix(name: string, rarity: Rarity): string {
 }
 
 export function generateLoot(
-  lootTable: LootTableEntry[] = ALL_LOOT_TABLES
+  lootTable: LootTableEntry[] = ALL_LOOT_TABLES,
+  customWeights?: Record<Rarity, number>
 ): LootItem {
   // First, roll for rarity globally (true 1% legendary chance)
-  const rarity = selectGlobalRarity();
+  const rarity = selectGlobalRarity(customWeights);
 
   // Find items that support this rarity
   const eligibleItems = lootTable.filter((entry) =>

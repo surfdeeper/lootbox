@@ -152,12 +152,21 @@ export interface GameSave {
     hasAutoSell?: boolean; // Unlocks auto-sell settings
     autoSellRarities?: string[]; // Rarities to auto-sell
     hasPets?: boolean; // Unlocks pets feature
+    eggUpgrades?: {
+      common: boolean;
+      uncommon: boolean;
+      rare: boolean;
+      epic: boolean;
+      legendary: boolean;
+    };
   };
 
   rebirth: {
     tokens: number;
     count: number;
   };
+
+  eggs?: { rarity: string; id: string }[];
 
   stats: {
     totalChestsOpened: number;

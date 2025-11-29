@@ -1876,3 +1876,131 @@ body {
 .shop-buy-btn.rebirth-currency:hover:not(.disabled) {
   background: linear-gradient(135deg, #8b5cf6 0%, #c084fc 100%);
 }
+
+/* Egg on Chest Display */
+.egg-on-chest {
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  animation: eggBounce 0.5s ease-out;
+  z-index: 10;
+}
+
+@keyframes eggBounce {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-30px) scale(0.5);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(10px) scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.egg-on-chest-emoji {
+  font-size: 3rem;
+}
+
+.egg-on-chest.rarity-common .egg-on-chest-emoji {
+  animation: eggGlowCommon 1s ease-in-out infinite alternate;
+}
+
+.egg-on-chest.rarity-uncommon .egg-on-chest-emoji {
+  animation: eggGlowUncommon 1s ease-in-out infinite alternate;
+}
+
+.egg-on-chest.rarity-rare .egg-on-chest-emoji {
+  animation: eggGlowRare 1s ease-in-out infinite alternate;
+}
+
+.egg-on-chest.rarity-epic .egg-on-chest-emoji {
+  animation: eggGlowEpic 1s ease-in-out infinite alternate;
+}
+
+.egg-on-chest.rarity-legendary .egg-on-chest-emoji {
+  animation: eggGlowLegendary 1s ease-in-out infinite alternate;
+}
+
+@keyframes eggGlowCommon {
+  from { filter: drop-shadow(0 0 10px #9d9d9d); }
+  to { filter: drop-shadow(0 0 20px #9d9d9d); }
+}
+
+@keyframes eggGlowUncommon {
+  from { filter: drop-shadow(0 0 10px #1eff00) drop-shadow(0 0 15px #1eff00); }
+  to { filter: drop-shadow(0 0 20px #1eff00) drop-shadow(0 0 30px #1eff00); }
+}
+
+@keyframes eggGlowRare {
+  from { filter: drop-shadow(0 0 10px #0070dd) drop-shadow(0 0 15px #0070dd); }
+  to { filter: drop-shadow(0 0 20px #0070dd) drop-shadow(0 0 30px #0070dd); }
+}
+
+@keyframes eggGlowEpic {
+  from { filter: drop-shadow(0 0 10px #a335ee) drop-shadow(0 0 15px #a335ee); }
+  to { filter: drop-shadow(0 0 20px #a335ee) drop-shadow(0 0 30px #a335ee); }
+}
+
+@keyframes eggGlowLegendary {
+  from { filter: drop-shadow(0 0 10px #ff8000) drop-shadow(0 0 15px #ff8000); }
+  to { filter: drop-shadow(0 0 20px #ff8000) drop-shadow(0 0 30px #ff8000); }
+}
+
+.egg-on-chest-label {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Eggs in Open Pets tab */
+.no-eggs-message {
+  color: #888;
+  text-align: center;
+  font-style: italic;
+}
+
+.eggs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 1rem;
+}
+
+.egg-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.egg-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.egg-emoji {
+  font-size: 2.5rem;
+}
+
+.egg-rarity {
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-transform: capitalize;
+}

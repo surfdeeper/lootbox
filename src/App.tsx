@@ -954,6 +954,7 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
       <div className="rebirth-tokens-display">
         <span className="rebirth-tokens-text">🔄 {rebirthTokens} Rebirth Tokens</span>
       </div>
+      <h1 className="title">Lootbox</h1>
     </div>
   );
 }
@@ -1452,8 +1453,6 @@ export default function App() {
           🐾 Pets
         </button>
       )}
-
-      <h1 className="title">Lootbox</h1>
 
       {levelUpNotification && (
         <div className="level-up-notification">

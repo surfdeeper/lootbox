@@ -258,6 +258,8 @@ function Shop({
   purchasedBoxes,
   hasAutoOpen,
   onBuyAutoOpen,
+  hasAutoSell,
+  onBuyAutoSell,
 }: {
   onClose: () => void;
   coins: number;
@@ -269,6 +271,8 @@ function Shop({
   purchasedBoxes: string[];
   hasAutoOpen: boolean;
   onBuyAutoOpen: () => void;
+  hasAutoSell: boolean;
+  onBuyAutoSell: () => void;
 }) {
   const [activeSection, setActiveSection] = useState<ShopSection>("idle");
 
@@ -423,6 +427,27 @@ function Shop({
     );
   };
 
+  const autoSellCost = 25;
+
+  const renderSpecialsContent = () => (
+    <div className="shop-items-grid">
+      <div className="shop-item-card">
+        <span className="shop-item-emoji">🔄</span>
+        <h3 className="shop-item-name">Auto Sell</h3>
+        <p className="shop-item-description">
+          Unlocks auto-sell settings in your inventory. Automatically sell items of selected rarities when unboxed.
+        </p>
+        <button
+          className={`shop-buy-btn ${hasAutoSell || coins < autoSellCost ? "disabled" : ""}`}
+          onClick={() => !hasAutoSell && coins >= autoSellCost && onBuyAutoSell()}
+          disabled={hasAutoSell || coins < autoSellCost}
+        >
+          {hasAutoSell ? "✓ Owned" : `💰 ${autoSellCost} Coins`}
+        </button>
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeSection) {
       case "idle":
@@ -431,6 +456,8 @@ function Shop({
         return renderLuckContent();
       case "boxes":
         return renderBoxesContent();
+      case "specials":
+        return renderSpecialsContent();
       default:
         return <p className="shop-empty">Coming soon...</p>;
     }
@@ -474,11 +501,17 @@ function Inventory({
   onClose,
   onSellItem,
   onBulkSell,
+  hasAutoSell,
+  autoSellRarities,
+  onToggleAutoSellRarity,
 }: {
   items: LootItem[];
   onClose: () => void;
   onSellItem: (itemId: string) => void;
   onBulkSell: (itemIds: string[]) => number;
+  hasAutoSell: boolean;
+  autoSellRarities: Set<Rarity>;
+  onToggleAutoSellRarity: (rarity: Rarity) => void;
 }) {
   const [filter, setFilter] = useState<RarityFilter>("all");
   const [selectedItem, setSelectedItem] = useState<LootItem | null>(null);
@@ -486,6 +519,7 @@ function Inventory({
   const [selectedForCompare, setSelectedForCompare] = useState<LootItem[]>([]);
   const [bulkSellMode, setBulkSellMode] = useState(false);
   const [selectedForSell, setSelectedForSell] = useState<Set<string>>(new Set());
+  const [showAutoSellSettings, setShowAutoSellSettings] = useState(false);
 
   const rarityOrder: Rarity[] = [
     Rarity.Legendary,
@@ -560,6 +594,14 @@ function Inventory({
         <div className="inventory-header">
           <h2>Inventory</h2>
           <div className="inventory-header-actions">
+            {hasAutoSell && (
+              <button
+                className={`auto-sell-settings-btn ${showAutoSellSettings ? 'active' : ''}`}
+                onClick={() => setShowAutoSellSettings(!showAutoSellSettings)}
+              >
+                {showAutoSellSettings ? '✓ Auto Sell' : '🔄 Auto Sell'}
+              </button>
+            )}
             <button
               className={`bulk-sell-mode-btn ${bulkSellMode ? 'active' : ''}`}
               onClick={() => {
@@ -567,6 +609,7 @@ function Inventory({
                 setSelectedForSell(new Set());
                 setCompareMode(false);
                 setSelectedForCompare([]);
+                setShowAutoSellSettings(false);
               }}
             >
               {bulkSellMode ? '✓ Bulk Sell' : '💰 Bulk Sell'}
@@ -578,6 +621,7 @@ function Inventory({
                 setSelectedForCompare([]);
                 setBulkSellMode(false);
                 setSelectedForSell(new Set());
+                setShowAutoSellSettings(false);
               }}
             >
               {compareMode ? '✓ Compare Mode' : '⚖️ Compare'}
@@ -605,6 +649,37 @@ function Inventory({
             </button>
           ))}
         </div>
+
+        {showAutoSellSettings && (
+          <div className="auto-sell-settings">
+            <h3>Auto Sell Settings</h3>
+            <p className="auto-sell-desc">Select rarities to automatically sell when unboxed:</p>
+            <div className="auto-sell-options">
+              {rarityOrder.map((rarity) => {
+                const sellPrices: Record<Rarity, number> = {
+                  [Rarity.Common]: 1,
+                  [Rarity.Uncommon]: 2,
+                  [Rarity.Rare]: 3,
+                  [Rarity.Epic]: 5,
+                  [Rarity.Legendary]: 10,
+                };
+                return (
+                  <label key={rarity} className="auto-sell-option" style={{ borderColor: RARITY_COLORS[rarity] }}>
+                    <input
+                      type="checkbox"
+                      checked={autoSellRarities.has(rarity)}
+                      onChange={() => onToggleAutoSellRarity(rarity)}
+                    />
+                    <span style={{ color: RARITY_COLORS[rarity] }}>
+                      {RARITY_EMOJIS[rarity]} {rarity}
+                    </span>
+                    <span className="auto-sell-price">+{sellPrices[rarity]} coins</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {bulkSellMode && (
           <div className="bulk-sell-info">
@@ -774,6 +849,8 @@ export default function App() {
   const [offlineEarnings, setOfflineEarnings] = useState<number | null>(null);
   const [purchasedBoxes, setPurchasedBoxes] = useState<string[]>([]);
   const [hasAutoOpen, setHasAutoOpen] = useState(false);
+  const [hasAutoSell, setHasAutoSell] = useState(false);
+  const [autoSellRarities, setAutoSellRarities] = useState<Set<Rarity>>(new Set());
   const [levelUpNotification, setLevelUpNotification] = useState<number | null>(null);
   const [recentDrops, setRecentDrops] = useState<LootItem[]>([]);
   const [showCodeInput, setShowCodeInput] = useState(false);
@@ -804,6 +881,8 @@ export default function App() {
       setStats(save.stats);
       setPurchasedBoxes(save.purchasedBoxes || []);
       setHasAutoOpen(save.upgrades.hasAutoOpen || false);
+      setHasAutoSell(save.upgrades.hasAutoSell || false);
+      setAutoSellRarities(new Set((save.upgrades.autoSellRarities || []) as Rarity[]));
 
       // Calculate offline earnings
       const earnings = calculateOfflineEarnings(save.lastSaved, save.upgrades.coinGeneratorLevel);
@@ -846,12 +925,14 @@ export default function App() {
         luckUpgrade2: luckUpgrades.luckUpgrade2,
         luckUpgrade3: luckUpgrades.luckUpgrade3,
         hasAutoOpen,
+        hasAutoSell,
+        autoSellRarities: Array.from(autoSellRarities),
       },
       stats,
       purchasedBoxes,
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities]);
 
   // Show level-up notification - only when level actually increases from gameplay
   const prevLevelRef = useRef<number>(level);
@@ -936,11 +1017,17 @@ export default function App() {
       const customWeights = getBoxRarityWeights();
       const newLoot = generateLoot(undefined, customWeights);
       setLoot(newLoot);
-      setInventory((prev) => [...prev, newLoot]);
-      
+
+      // Check if item should be auto-sold
+      const shouldAutoSell = hasAutoSell && autoSellRarities.has(newLoot.rarity);
+
+      if (!shouldAutoSell) {
+        setInventory((prev) => [...prev, newLoot]);
+      }
+
       // Add to recent drops (keep last 5)
       setRecentDrops(prev => [newLoot, ...prev].slice(0, 5));
-      
+
       // Play sound effect based on rarity
       playChestOpenSound(newLoot.rarity);
 
@@ -964,7 +1051,18 @@ export default function App() {
         [Rarity.Epic]: 2.5,
         [Rarity.Legendary]: 10,
       };
-      const earnedCoins = coinRewards[newLoot.rarity] + levelUpCoins;
+
+      // Sell prices for auto-sell
+      const sellPrices: Record<Rarity, number> = {
+        [Rarity.Common]: 1,
+        [Rarity.Uncommon]: 2,
+        [Rarity.Rare]: 3,
+        [Rarity.Epic]: 5,
+        [Rarity.Legendary]: 10,
+      };
+
+      const autoSellBonus = shouldAutoSell ? sellPrices[newLoot.rarity] : 0;
+      const earnedCoins = coinRewards[newLoot.rarity] + levelUpCoins + autoSellBonus;
       setCoins((prev) => prev + earnedCoins);
 
       // Update stats
@@ -1094,12 +1192,14 @@ export default function App() {
         luckUpgrade2: luckUpgrades.luckUpgrade2,
         luckUpgrade3: luckUpgrades.luckUpgrade3,
         hasAutoOpen,
+        hasAutoSell,
+        autoSellRarities: Array.from(autoSellRarities),
       },
       stats,
       purchasedBoxes,
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities]);
 
   const getChestEmoji = () => {
     if (chestState === "open") return "📭";
@@ -1173,6 +1273,19 @@ export default function App() {
           onClose={() => setShowInventory(false)}
           onSellItem={handleSellItem}
           onBulkSell={handleBulkSell}
+          hasAutoSell={hasAutoSell}
+          autoSellRarities={autoSellRarities}
+          onToggleAutoSellRarity={(rarity) => {
+            setAutoSellRarities(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(rarity)) {
+                newSet.delete(rarity);
+              } else {
+                newSet.add(rarity);
+              }
+              return newSet;
+            });
+          }}
         />
       )}
 
@@ -1218,6 +1331,13 @@ export default function App() {
             if (coins >= 50) {
               setCoins((prev) => prev - 50);
               setHasAutoOpen(true);
+            }
+          }}
+          hasAutoSell={hasAutoSell}
+          onBuyAutoSell={() => {
+            if (coins >= 25) {
+              setCoins((prev) => prev - 25);
+              setHasAutoSell(true);
             }
           }}
         />

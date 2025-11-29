@@ -149,6 +149,8 @@ export interface GameSave {
     luckUpgrade2: number; // Rare +2%, Uncommon +2%, Common -4%
     luckUpgrade3: number; // Epic +3%, Legendary +1%, Common -4%
     hasAutoOpen?: boolean; // Auto-opens boxes every 5 seconds
+    hasAutoSell?: boolean; // Unlocks auto-sell settings
+    autoSellRarities?: string[]; // Rarities to auto-sell
   };
 
   stats: {

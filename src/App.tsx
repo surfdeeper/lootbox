@@ -595,42 +595,117 @@ function Shop({
   );
 }
 
-type PetsTab = "pets" | "open-pets";
+type PetsTab = "pets" | "equip-pets" | "open-pets";
 
-function PetsMenu({ onClose, eggs }: { onClose: () => void; eggs: { rarity: Rarity; id: string }[] }) {
+interface Pet {
+  id: string;
+  name: string;
+  type: "dog" | "cat";
+  rarity: Rarity;
+}
+
+function PetsMenu({
+  onClose,
+  eggs,
+  pets,
+  onHatchEgg
+}: {
+  onClose: () => void;
+  eggs: { rarity: Rarity; id: string }[];
+  pets: Pet[];
+  onHatchEgg: (eggId: string) => void;
+}) {
   const [activeTab, setActiveTab] = useState<PetsTab>("pets");
+  const [selectedEgg, setSelectedEgg] = useState<{ rarity: Rarity; id: string } | null>(null);
 
   const renderPetsContent = () => (
     <div className="pets-grid">
-      {[1, 2, 3, 4, 5, 6].map((slot) => (
-        <div key={slot} className="pet-slot">
-          <div className="pet-slot-content">
-            <span className="pet-placeholder">?</span>
-          </div>
-          <button className="pet-equip-btn">Equip</button>
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderOpenPetsContent = () => (
-    <div className="open-pets-content">
-      {eggs.length === 0 ? (
-        <p className="no-eggs-message">No eggs yet. Open boxes to find eggs!</p>
+      {pets.length === 0 ? (
+        <p className="no-pets-message">No pets yet. Hatch some eggs!</p>
       ) : (
-        <div className="eggs-grid">
-          {eggs.map((egg) => (
-            <div key={egg.id} className="egg-item" style={{ borderColor: RARITY_COLORS[egg.rarity] }}>
-              <span className="egg-emoji">🥚</span>
-              <span className="egg-rarity" style={{ color: RARITY_COLORS[egg.rarity] }}>
-                {egg.rarity}
-              </span>
+        pets.map((pet) => (
+          <div key={pet.id} className="pet-slot has-pet" style={{ borderColor: RARITY_COLORS[pet.rarity] }}>
+            <div className="pet-slot-content" style={{ borderColor: RARITY_COLORS[pet.rarity] }}>
+              <span className="pet-emoji">{pet.type === "dog" ? "🐕" : "🐈"}</span>
             </div>
-          ))}
-        </div>
+            <span className="pet-name" style={{ color: RARITY_COLORS[pet.rarity] }}>{pet.name}</span>
+          </div>
+        ))
       )}
     </div>
   );
+
+  const renderEquipPetsContent = () => (
+    <div className="equip-pets-content">
+      <div className="equip-slots-grid">
+        {[1, 2, 3, 4, 5, 6].map((slot) => (
+          <div key={slot} className="equip-slot">
+            <div className="equip-slot-content">
+              <span className="equip-slot-empty">?</span>
+            </div>
+            <span className="equip-slot-label">Slot {slot}</span>
+            <button className="equip-slot-btn">Equip</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderOpenPetsContent = () => {
+    const rarities: Rarity[] = [Rarity.Common, Rarity.Uncommon, Rarity.Rare, Rarity.Epic, Rarity.Legendary];
+
+    // Count eggs by rarity
+    const eggCounts = rarities.reduce((acc, rarity) => {
+      acc[rarity] = eggs.filter(e => e.rarity === rarity).length;
+      return acc;
+    }, {} as Record<Rarity, number>);
+
+    // Get first egg of each rarity for hatching
+    const getFirstEggOfRarity = (rarity: Rarity) => {
+      return eggs.find(e => e.rarity === rarity);
+    };
+
+    return (
+      <div className="open-pets-content">
+        <div className="eggs-slots-grid">
+          {rarities.map((rarity) => {
+            const count = eggCounts[rarity];
+            const egg = getFirstEggOfRarity(rarity);
+            return (
+              <div
+                key={rarity}
+                className={`egg-slot ${count > 0 ? 'has-eggs clickable' : 'empty'}`}
+                style={{ borderColor: RARITY_COLORS[rarity] }}
+                onClick={() => egg && setSelectedEgg(egg)}
+              >
+                <div className="egg-slot-content" style={{ borderColor: RARITY_COLORS[rarity] }}>
+                  {count > 0 ? (
+                    <>
+                      <span className="egg-slot-emoji">🥚</span>
+                      <span className="egg-slot-count" style={{ backgroundColor: RARITY_COLORS[rarity] }}>
+                        x{count}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="egg-slot-empty">?</span>
+                  )}
+                </div>
+                <span className="egg-slot-rarity" style={{ color: RARITY_COLORS[rarity] }}>
+                  {rarity}
+                </span>
+              </div>
+            );
+          })}
+          <div className="egg-slot coming-soon">
+            <div className="egg-slot-content coming-soon-content">
+              <span className="coming-soon-icon">✨</span>
+            </div>
+            <span className="coming-soon-text">Coming Soon...</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="pets-overlay" onClick={onClose}>
@@ -649,6 +724,12 @@ function PetsMenu({ onClose, eggs }: { onClose: () => void; eggs: { rarity: Rari
             Pets
           </button>
           <button
+            className={`pets-tab ${activeTab === "equip-pets" ? "active" : ""}`}
+            onClick={() => setActiveTab("equip-pets")}
+          >
+            Equip Pets
+          </button>
+          <button
             className={`pets-tab ${activeTab === "open-pets" ? "active" : ""}`}
             onClick={() => setActiveTab("open-pets")}
           >
@@ -656,9 +737,42 @@ function PetsMenu({ onClose, eggs }: { onClose: () => void; eggs: { rarity: Rari
           </button>
         </div>
         <div className="pets-content">
-          {activeTab === "pets" ? renderPetsContent() : renderOpenPetsContent()}
+          {activeTab === "pets" && renderPetsContent()}
+          {activeTab === "equip-pets" && renderEquipPetsContent()}
+          {activeTab === "open-pets" && renderOpenPetsContent()}
         </div>
       </div>
+
+      {selectedEgg && (
+        <div className="hatch-modal-overlay" onClick={() => setSelectedEgg(null)}>
+          <div className="hatch-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="hatch-egg-display" style={{ borderColor: RARITY_COLORS[selectedEgg.rarity] }}>
+              <span className="hatch-egg-emoji">🥚</span>
+              <span className="hatch-egg-rarity" style={{ color: RARITY_COLORS[selectedEgg.rarity] }}>
+                {selectedEgg.rarity.toUpperCase()}
+              </span>
+            </div>
+            <p className="hatch-prompt">Would you like to hatch this egg?</p>
+            <div className="hatch-buttons">
+              <button
+                className="hatch-btn hatch-confirm"
+                onClick={() => {
+                  onHatchEgg(selectedEgg.id);
+                  setSelectedEgg(null);
+                }}
+              >
+                Hatch
+              </button>
+              <button
+                className="hatch-btn hatch-cancel"
+                onClick={() => setSelectedEgg(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1026,7 +1140,7 @@ function Inventory({
   );
 }
 
-function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void }) {
+function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, rebirthCount }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; rebirthCount: number }) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
   const [activeSettingsTab, setActiveSettingsTab] = useState<string | null>(null);
@@ -1097,6 +1211,11 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
           <span className="coin-rate">+{coinsPerSecond.toFixed(2)}/s</span>
         )}
       </div>
+      {rebirthCount > 0 && (
+        <div className="rebirth-bonus-display">
+          <span className="rebirth-bonus-text">+{rebirthCount * 10}% Coin Bonus</span>
+        </div>
+      )}
       <div className="rebirth-tokens-display">
         <span className="rebirth-tokens-text">🔄 {rebirthTokens} Rebirth Tokens</span>
       </div>
@@ -1145,6 +1264,7 @@ export default function App() {
     legendary: false,
   });
   const [eggs, setEggs] = useState<{ rarity: Rarity; id: string }[]>([]);
+  const [pets, setPets] = useState<Pet[]>([]);
   const [recentEgg, setRecentEgg] = useState<Rarity | null>(null);
   const [levelUpNotification, setLevelUpNotification] = useState<number | null>(null);
   const [recentDrops, setRecentDrops] = useState<LootItem[]>([]);
@@ -1187,6 +1307,7 @@ export default function App() {
         legendary: false,
       });
       setEggs((save.eggs || []).map(e => ({ ...e, rarity: e.rarity as Rarity })));
+      setPets((save.pets || []).map(p => ({ ...p, rarity: p.rarity as Rarity, type: p.type as "dog" | "cat" })));
       setRebirthTokens(save.rebirth?.tokens || 0);
       setRebirthCount(save.rebirth?.count || 0);
 
@@ -1241,11 +1362,12 @@ export default function App() {
         count: rebirthCount,
       },
       eggs,
+      pets,
       stats,
       purchasedBoxes,
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets]);
 
   // Show level-up notification - only when level actually increases from gameplay
   const prevLevelRef = useRef<number>(level);
@@ -1265,12 +1387,14 @@ export default function App() {
     if (coinGeneratorLevel <= 0) return;
 
     const interval = setInterval(() => {
-      const coinsPerSecond = coinGeneratorLevel * 0.01;
+      const baseCoinsPerSecond = coinGeneratorLevel * 0.01;
+      const rebirthBonus = rebirthCount * 0.10; // 10% per rebirth
+      const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus);
       setCoins((prev) => prev + coinsPerSecond / 10); // Divide by 10 since we run 10 times per second
     }, 100);
 
     return () => clearInterval(interval);
-  }, [coinGeneratorLevel]);
+  }, [coinGeneratorLevel, rebirthCount]);
 
   // Auto-open chests
   useEffect(() => {
@@ -1349,9 +1473,11 @@ export default function App() {
       setXp(newXp);
       setLevel(newLevel);
 
-      // Award coins based on rarity + level up bonus
+      // Award coins based on rarity + level up bonus + rebirth bonus
       const autoSellBonus = shouldAutoSell ? SELL_PRICES[newLoot.rarity] : 0;
-      const earnedCoins = COIN_REWARDS[newLoot.rarity] + levelUpCoins + autoSellBonus;
+      const baseCoins = COIN_REWARDS[newLoot.rarity] + levelUpCoins + autoSellBonus;
+      const rebirthBonus = rebirthCount * 0.10; // 10% per rebirth
+      const earnedCoins = baseCoins * (1 + rebirthBonus);
       setCoins((prev) => prev + earnedCoins);
 
       // Update stats
@@ -1488,11 +1614,33 @@ export default function App() {
         count: rebirthCount,
       },
       eggs,
+      pets,
       stats,
       purchasedBoxes,
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets]);
+
+  const handleHatchEgg = useCallback((eggId: string) => {
+    const egg = eggs.find(e => e.id === eggId);
+    if (!egg) return;
+
+    // Remove the egg
+    setEggs(prev => prev.filter(e => e.id !== eggId));
+
+    // 50/50 chance for dog or cat
+    const petType: "dog" | "cat" = Math.random() < 0.5 ? "dog" : "cat";
+    const petName = petType === "dog" ? "Dog" : "Cat";
+
+    const newPet: Pet = {
+      id: crypto.randomUUID(),
+      name: petName,
+      type: petType,
+      rarity: egg.rarity,
+    };
+
+    setPets(prev => [...prev, newPet]);
+  }, [eggs]);
 
   const getRebirthCost = useCallback(() => {
     return Math.floor(200 * Math.pow(1.25, rebirthCount));
@@ -1540,7 +1688,8 @@ export default function App() {
 
   return (
     <div className="app">
-      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} />
+      <div className="version-tracker">vs: 1.00</div>
+      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} rebirthCount={rebirthCount} />
 
       <button
         className={`rebirth-btn ${coins >= getRebirthCost() ? '' : 'disabled'}`}
@@ -1709,7 +1858,7 @@ export default function App() {
       )}
 
       {showPets && (
-        <PetsMenu onClose={() => setShowPets(false)} eggs={eggs} />
+        <PetsMenu onClose={() => setShowPets(false)} eggs={eggs} pets={pets} onHatchEgg={handleHatchEgg} />
       )}
 
       {offlineEarnings !== null && (

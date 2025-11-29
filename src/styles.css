@@ -1627,6 +1627,24 @@ body {
   text-align: center;
 }
 
+/* Rebirth Bonus Display */
+.rebirth-bonus-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.rebirth-bonus-text {
+  font-size: 0.85rem;
+  color: #4ade80;
+  font-weight: bold;
+  background: rgba(74, 222, 128, 0.15);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
 /* Rebirth Tokens Display */
 .rebirth-tokens-display {
   display: flex;
@@ -1883,7 +1901,7 @@ body {
 /* Egg on Chest Display */
 .egg-on-chest {
   position: absolute;
-  top: -60px;
+  top: -100px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -2006,6 +2024,309 @@ body {
   font-size: 0.8rem;
   font-weight: bold;
   text-transform: capitalize;
+}
+
+/* Eggs Slots Grid */
+.eggs-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.egg-slot {
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.egg-slot.has-eggs.clickable {
+  cursor: pointer;
+}
+
+.egg-slot.has-eggs.clickable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.egg-slot.empty {
+  opacity: 0.5;
+}
+
+.egg-slot-content {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px dashed;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.egg-slot.has-eggs .egg-slot-content {
+  border-style: solid;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.egg-slot-emoji {
+  font-size: 2rem;
+}
+
+.egg-slot-count {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  padding: 0.15rem 0.4rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: #fff;
+  min-width: 24px;
+  text-align: center;
+}
+
+.egg-slot-empty {
+  font-size: 1.5rem;
+  color: #666;
+}
+
+.egg-slot-rarity {
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-transform: capitalize;
+}
+
+/* Coming Soon Slot */
+.egg-slot.coming-soon {
+  border-color: rgba(255, 255, 255, 0.2);
+  opacity: 0.6;
+}
+
+.coming-soon-content {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.coming-soon-icon {
+  font-size: 1.5rem;
+  opacity: 0.7;
+}
+
+.coming-soon-text {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
+}
+
+/* Equip Pets Tab */
+.equip-pets-content {
+  padding: 0.5rem;
+}
+
+.equip-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.equip-slot {
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.equip-slot:hover {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.equip-slot-content {
+  width: 60px;
+  height: 60px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 2px dashed rgba(16, 185, 129, 0.3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.equip-slot-empty {
+  font-size: 1.5rem;
+  color: #666;
+}
+
+.equip-slot-label {
+  font-size: 0.85rem;
+  color: #aaa;
+  font-weight: bold;
+}
+
+.equip-slot-btn {
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  background: #059669;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.equip-slot-btn:hover {
+  background: #10b981;
+}
+
+.egg-item.clickable {
+  cursor: pointer;
+}
+
+.egg-item.clickable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* No Pets Message */
+.no-pets-message {
+  color: #888;
+  text-align: center;
+  font-style: italic;
+  padding: 2rem;
+}
+
+/* Pet slot with pet */
+.pet-slot.has-pet {
+  border-color: inherit;
+}
+
+.pet-slot.has-pet .pet-slot-content {
+  border-style: solid;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.pet-emoji {
+  font-size: 2rem;
+}
+
+.pet-name {
+  font-size: 0.85rem;
+  font-weight: bold;
+  text-transform: capitalize;
+}
+
+/* Hatch Modal */
+.hatch-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  animation: fadeIn 0.2s ease;
+}
+
+.hatch-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid #10b981;
+  border-radius: 16px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  animation: slideIn 0.3s ease;
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.3);
+  min-width: 280px;
+}
+
+.hatch-egg-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 3px solid;
+  border-radius: 12px;
+}
+
+.hatch-egg-emoji {
+  font-size: 4rem;
+  animation: eggWobble 1s ease-in-out infinite;
+}
+
+@keyframes eggWobble {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
+
+.hatch-egg-rarity {
+  font-size: 1rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+
+.hatch-prompt {
+  color: #ccc;
+  font-size: 1.1rem;
+  text-align: center;
+  margin: 0;
+}
+
+.hatch-buttons {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+}
+
+.hatch-btn {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.hatch-confirm {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+}
+
+.hatch-confirm:hover {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  transform: scale(1.02);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+.hatch-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #aaa;
+}
+
+.hatch-cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
 
 /* Sell price in compact item cards */
@@ -2221,4 +2542,17 @@ body {
   font-weight: bold;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Version Tracker */
+.version-tracker {
+  position: fixed;
+  top: 168px;
+  right: 10px;
+  font-size: 0.75rem;
+  color: #aaa;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
 }

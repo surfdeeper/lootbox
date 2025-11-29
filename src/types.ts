@@ -192,6 +192,8 @@ export interface GameSave {
 
   eggs?: { rarity: string; id: string }[];
 
+  pets?: { id: string; name: string; type: string; rarity: string }[];
+
   stats: {
     totalChestsOpened: number;
     totalCoinsEarned: number;

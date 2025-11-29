@@ -260,6 +260,9 @@ function Shop({
   onBuyAutoOpen,
   hasAutoSell,
   onBuyAutoSell,
+  hasPets,
+  onBuyPets,
+  rebirthTokens,
 }: {
   onClose: () => void;
   coins: number;
@@ -273,6 +276,9 @@ function Shop({
   onBuyAutoOpen: () => void;
   hasAutoSell: boolean;
   onBuyAutoSell: () => void;
+  hasPets: boolean;
+  onBuyPets: () => void;
+  rebirthTokens: number;
 }) {
   const [activeSection, setActiveSection] = useState<ShopSection>("idle");
 
@@ -428,6 +434,7 @@ function Shop({
   };
 
   const autoSellCost = 25;
+  const petsCost = 3; // rebirth tokens
 
   const renderSpecialsContent = () => (
     <div className="shop-items-grid">
@@ -443,6 +450,20 @@ function Shop({
           disabled={hasAutoSell || coins < autoSellCost}
         >
           {hasAutoSell ? "✓ Owned" : `💰 ${autoSellCost} Coins`}
+        </button>
+      </div>
+      <div className="shop-item-card">
+        <span className="shop-item-emoji">🐾</span>
+        <h3 className="shop-item-name">Unlock Pets</h3>
+        <p className="shop-item-description">
+          Unlocks the pets system. Collect and equip pets to boost your gameplay!
+        </p>
+        <button
+          className={`shop-buy-btn rebirth-currency ${hasPets || rebirthTokens < petsCost ? "disabled" : ""}`}
+          onClick={() => !hasPets && rebirthTokens >= petsCost && onBuyPets()}
+          disabled={hasPets || rebirthTokens < petsCost}
+        >
+          {hasPets ? "✓ Owned" : `🔄 ${petsCost} Rebirth Tokens`}
         </button>
       </div>
     </div>
@@ -490,6 +511,61 @@ function Shop({
             {sections.find((s) => s.id === activeSection)?.label}
           </h2>
           {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type PetsTab = "pets" | "open-pets";
+
+function PetsMenu({ onClose }: { onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<PetsTab>("pets");
+
+  const renderPetsContent = () => (
+    <div className="pets-grid">
+      {[1, 2, 3, 4, 5, 6].map((slot) => (
+        <div key={slot} className="pet-slot">
+          <div className="pet-slot-content">
+            <span className="pet-placeholder">?</span>
+          </div>
+          <button className="pet-equip-btn">Equip</button>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderOpenPetsContent = () => (
+    <div className="open-pets-content">
+      {/* Empty for now */}
+    </div>
+  );
+
+  return (
+    <div className="pets-overlay" onClick={onClose}>
+      <div className="pets-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="pets-header">
+          <h2>Pets</h2>
+          <button className="pets-close-btn" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="pets-tabs">
+          <button
+            className={`pets-tab ${activeTab === "pets" ? "active" : ""}`}
+            onClick={() => setActiveTab("pets")}
+          >
+            Pets
+          </button>
+          <button
+            className={`pets-tab ${activeTab === "open-pets" ? "active" : ""}`}
+            onClick={() => setActiveTab("open-pets")}
+          >
+            Open Pets
+          </button>
+        </div>
+        <div className="pets-content">
+          {activeTab === "pets" ? renderPetsContent() : renderOpenPetsContent()}
         </div>
       </div>
     </div>
@@ -748,7 +824,7 @@ function Inventory({
   );
 }
 
-function XPBar({ xp, level, coins, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave }: { xp: number; level: number; coins: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void }) {
+function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void }) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
   const [activeSettingsTab, setActiveSettingsTab] = useState<string | null>(null);
@@ -819,6 +895,9 @@ function XPBar({ xp, level, coins, showSettings, onToggleSettings, coinGenerator
           <span className="coin-rate">+{coinsPerSecond.toFixed(2)}/s</span>
         )}
       </div>
+      <div className="rebirth-tokens-display">
+        <span className="rebirth-tokens-text">🔄 {rebirthTokens} Rebirth Tokens</span>
+      </div>
     </div>
   );
 }
@@ -851,6 +930,10 @@ export default function App() {
   const [hasAutoOpen, setHasAutoOpen] = useState(false);
   const [hasAutoSell, setHasAutoSell] = useState(false);
   const [autoSellRarities, setAutoSellRarities] = useState<Set<Rarity>>(new Set());
+  const [rebirthTokens, setRebirthTokens] = useState(0);
+  const [rebirthCount, setRebirthCount] = useState(0);
+  const [hasPets, setHasPets] = useState(false);
+  const [showPets, setShowPets] = useState(false);
   const [levelUpNotification, setLevelUpNotification] = useState<number | null>(null);
   const [recentDrops, setRecentDrops] = useState<LootItem[]>([]);
   const [showCodeInput, setShowCodeInput] = useState(false);
@@ -883,6 +966,9 @@ export default function App() {
       setHasAutoOpen(save.upgrades.hasAutoOpen || false);
       setHasAutoSell(save.upgrades.hasAutoSell || false);
       setAutoSellRarities(new Set((save.upgrades.autoSellRarities || []) as Rarity[]));
+      setHasPets(save.upgrades.hasPets || false);
+      setRebirthTokens(save.rebirth?.tokens || 0);
+      setRebirthCount(save.rebirth?.count || 0);
 
       // Calculate offline earnings
       const earnings = calculateOfflineEarnings(save.lastSaved, save.upgrades.coinGeneratorLevel);
@@ -927,12 +1013,17 @@ export default function App() {
         hasAutoOpen,
         hasAutoSell,
         autoSellRarities: Array.from(autoSellRarities),
+        hasPets,
+      },
+      rebirth: {
+        tokens: rebirthTokens,
+        count: rebirthCount,
       },
       stats,
       purchasedBoxes,
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount]);
 
   // Show level-up notification - only when level actually increases from gameplay
   const prevLevelRef = useRef<number>(level);
@@ -1194,12 +1285,42 @@ export default function App() {
         hasAutoOpen,
         hasAutoSell,
         autoSellRarities: Array.from(autoSellRarities),
+        hasPets,
+      },
+      rebirth: {
+        tokens: rebirthTokens,
+        count: rebirthCount,
       },
       stats,
       purchasedBoxes,
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount]);
+
+  const getRebirthCost = useCallback(() => {
+    return Math.floor(200 * Math.pow(1.25, rebirthCount));
+  }, [rebirthCount]);
+
+  const handleRebirth = useCallback(() => {
+    const cost = getRebirthCost();
+    if (coins >= cost) {
+      // Reset progress but keep rebirth upgrades
+      setCoins(0);
+      setXp(0);
+      setLevel(1);
+      setInventory([]);
+      setCoinGeneratorLevel(0);
+      setLuckUpgrades({ luckUpgrade1: 0, luckUpgrade2: 0, luckUpgrade3: 0 });
+      setHasAutoOpen(false);
+      setHasAutoSell(false);
+      setAutoSellRarities(new Set());
+      setPurchasedBoxes([]);
+      setRecentDrops([]);
+      // Award rebirth token
+      setRebirthTokens(prev => prev + 1);
+      setRebirthCount(prev => prev + 1);
+    }
+  }, [coins, getRebirthCost]);
 
   const getChestEmoji = () => {
     if (chestState === "open") return "📭";
@@ -1220,7 +1341,23 @@ export default function App() {
 
   return (
     <div className="app">
-      <XPBar xp={xp} level={level} coins={coins} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} />
+      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} />
+
+      <button
+        className={`rebirth-btn ${coins >= getRebirthCost() ? '' : 'disabled'}`}
+        onClick={handleRebirth}
+        disabled={coins < getRebirthCost()}
+      >
+        <span className="rebirth-icon">🔄</span>
+        <span className="rebirth-text">Rebirth</span>
+        <span className="rebirth-cost">💰 {getRebirthCost()}</span>
+      </button>
+
+      {hasPets && (
+        <button className="pets-btn" onClick={() => setShowPets(true)}>
+          🐾 Pets
+        </button>
+      )}
 
       <h1 className="title">Lootbox</h1>
 
@@ -1340,7 +1477,19 @@ export default function App() {
               setHasAutoSell(true);
             }
           }}
+          hasPets={hasPets}
+          onBuyPets={() => {
+            if (rebirthTokens >= 3) {
+              setRebirthTokens((prev) => prev - 3);
+              setHasPets(true);
+            }
+          }}
+          rebirthTokens={rebirthTokens}
         />
+      )}
+
+      {showPets && (
+        <PetsMenu onClose={() => setShowPets(false)} />
       )}
 
       {offlineEarnings !== null && (

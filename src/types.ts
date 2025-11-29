@@ -151,6 +151,12 @@ export interface GameSave {
     hasAutoOpen?: boolean; // Auto-opens boxes every 5 seconds
     hasAutoSell?: boolean; // Unlocks auto-sell settings
     autoSellRarities?: string[]; // Rarities to auto-sell
+    hasPets?: boolean; // Unlocks pets feature
+  };
+
+  rebirth: {
+    tokens: number;
+    count: number;
   };
 
   stats: {

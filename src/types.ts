@@ -30,6 +30,30 @@ export const RARITY_EMOJIS: Record<Rarity, string> = {
   [Rarity.Legendary]: "🟡",
 };
 
+export const SELL_PRICES: Record<Rarity, number> = {
+  [Rarity.Common]: 1,
+  [Rarity.Uncommon]: 2,
+  [Rarity.Rare]: 3,
+  [Rarity.Epic]: 5,
+  [Rarity.Legendary]: 10,
+};
+
+export const XP_REWARDS: Record<Rarity, number> = {
+  [Rarity.Common]: 1,
+  [Rarity.Uncommon]: 3,
+  [Rarity.Rare]: 8,
+  [Rarity.Epic]: 35,
+  [Rarity.Legendary]: 125,
+};
+
+export const COIN_REWARDS: Record<Rarity, number> = {
+  [Rarity.Common]: 0.1,
+  [Rarity.Uncommon]: 0.3,
+  [Rarity.Rare]: 1,
+  [Rarity.Epic]: 2.5,
+  [Rarity.Legendary]: 10,
+};
+
 export enum ItemCategory {
   Pistol = "pistol",
   Rifle = "rifle",

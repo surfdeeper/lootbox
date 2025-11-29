@@ -1,14 +1,42 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { generateLoot } from "./generator";
-import { LootItem, RARITY_EMOJIS, RARITY_COLORS, Rarity, CATEGORY_ICONS, ItemCategory, GameSave, SAVE_KEY, SAVE_VERSION } from "./types";
+import { LootItem, RARITY_EMOJIS, RARITY_COLORS, Rarity, CATEGORY_ICONS, ItemCategory, GameSave, SAVE_KEY, SAVE_VERSION, SELL_PRICES, XP_REWARDS, COIN_REWARDS } from "./types";
+
+// Reusable audio context for sound effects
+let audioContext: AudioContext | null = null;
+function getAudioContext(): AudioContext | null {
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    }
+    return audioContext;
+  } catch {
+    return null;
+  }
+}
 
 // Save/Load utilities
-function saveGame(save: GameSave): void {
+type SaveError = { type: 'quota' | 'unknown'; message: string } | null;
+let lastSaveError: SaveError = null;
+
+function saveGame(save: GameSave): SaveError {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    lastSaveError = null;
+    return null;
   } catch (e) {
+    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
+      lastSaveError = { type: 'quota', message: 'Storage full! Try selling some items.' };
+    } else {
+      lastSaveError = { type: 'unknown', message: 'Failed to save game.' };
+    }
     console.error("Failed to save game:", e);
+    return lastSaveError;
   }
+}
+
+function getLastSaveError(): SaveError {
+  return lastSaveError;
 }
 
 function loadGame(): GameSave | null {
@@ -95,6 +123,7 @@ function LootItemCard({ item, compact = false, onView }: { item: LootItem; compa
           {item.name}
         </span>
         <span className="loot-category">{item.category}</span>
+        <span className="loot-sell-price">{SELL_PRICES[item.rarity]}c</span>
         {onView && (
           <button className="view-btn" onClick={onView}>
             View
@@ -131,14 +160,6 @@ function LootItemCard({ item, compact = false, onView }: { item: LootItem; compa
 
 function ItemDetailModal({ item, onClose, onSell }: { item: LootItem; onClose: () => void; onSell?: () => void }) {
   const color = RARITY_COLORS[item.rarity];
-  
-  const sellPrices: Record<Rarity, number> = {
-    [Rarity.Common]: 1,
-    [Rarity.Uncommon]: 2,
-    [Rarity.Rare]: 3,
-    [Rarity.Epic]: 5,
-    [Rarity.Legendary]: 10,
-  };
 
   return (
     <div className="item-detail-overlay" onClick={onClose}>
@@ -182,7 +203,7 @@ function ItemDetailModal({ item, onClose, onSell }: { item: LootItem; onClose: (
           </div>
           {onSell && (
             <button className="sell-item-btn" onClick={onSell}>
-              💰 Sell for {sellPrices[item.rarity]} Coins
+              💰 Sell for {SELL_PRICES[item.rarity]} Coins
             </button>
           )}
         </div>
@@ -329,7 +350,7 @@ function Shop({
           onClick={() => coins >= coinGenCost && onUpgradeCoinGenerator()}
           disabled={coins < coinGenCost}
         >
-          💰 {coinGenCost.toFixed(2)} Coins
+          {coins < coinGenCost ? `Need ${(coinGenCost - coins).toFixed(0)} more` : `💰 ${coinGenCost.toFixed(2)} Coins`}
         </button>
       </div>
       <div className="shop-item-card">
@@ -343,7 +364,7 @@ function Shop({
           onClick={() => !hasAutoOpen && coins >= autoOpenCost && onBuyAutoOpen()}
           disabled={hasAutoOpen || coins < autoOpenCost}
         >
-          {hasAutoOpen ? "✓ Owned" : `💰 ${autoOpenCost} Coins`}
+          {hasAutoOpen ? "✓ Owned" : coins < autoOpenCost ? `Need ${(autoOpenCost - coins).toFixed(0)} more` : `💰 ${autoOpenCost} Coins`}
         </button>
       </div>
     </div>
@@ -358,15 +379,19 @@ function Shop({
           Increases uncommon drop rate.
           <br />
           <span className="upgrade-stats">
-            Level: {luckUpgrades.luckUpgrade1}/{MAX_LUCK_LEVEL} | +{(luckUpgrades.luckUpgrade1 * 0.5).toFixed(1)}% Uncommon
+            +{(luckUpgrades.luckUpgrade1 * 0.5).toFixed(1)}% Uncommon
           </span>
         </p>
+        <div className="upgrade-progress">
+          <div className="upgrade-progress-bar" style={{ width: `${(luckUpgrades.luckUpgrade1 / MAX_LUCK_LEVEL) * 100}%`, backgroundColor: '#1eff00' }} />
+          <span className="upgrade-progress-text">{luckUpgrades.luckUpgrade1}/{MAX_LUCK_LEVEL}</span>
+        </div>
         <button
           className={`shop-buy-btn ${coins < luck1Cost || luckUpgrades.luckUpgrade1 >= MAX_LUCK_LEVEL ? "disabled" : ""}`}
           onClick={() => coins >= luck1Cost && luckUpgrades.luckUpgrade1 < MAX_LUCK_LEVEL && onUpgradeLuck(1)}
           disabled={coins < luck1Cost || luckUpgrades.luckUpgrade1 >= MAX_LUCK_LEVEL}
         >
-          {luckUpgrades.luckUpgrade1 >= MAX_LUCK_LEVEL ? "MAX" : `💰 ${luck1Cost.toFixed(2)} Coins`}
+          {luckUpgrades.luckUpgrade1 >= MAX_LUCK_LEVEL ? "MAX" : coins < luck1Cost ? `Need ${(luck1Cost - coins).toFixed(0)} more` : `💰 ${luck1Cost.toFixed(2)} Coins`}
         </button>
       </div>
       <div className="shop-item-card">
@@ -376,15 +401,19 @@ function Shop({
           Increases rare & uncommon drop rates.
           <br />
           <span className="upgrade-stats">
-            Level: {luckUpgrades.luckUpgrade2}/{MAX_LUCK_LEVEL} | +{(luckUpgrades.luckUpgrade2 * 2).toFixed(0)}% each
+            +{(luckUpgrades.luckUpgrade2 * 2).toFixed(0)}% each
           </span>
         </p>
+        <div className="upgrade-progress">
+          <div className="upgrade-progress-bar" style={{ width: `${(luckUpgrades.luckUpgrade2 / MAX_LUCK_LEVEL) * 100}%`, backgroundColor: '#0070dd' }} />
+          <span className="upgrade-progress-text">{luckUpgrades.luckUpgrade2}/{MAX_LUCK_LEVEL}</span>
+        </div>
         <button
           className={`shop-buy-btn ${coins < luck2Cost || luckUpgrades.luckUpgrade2 >= MAX_LUCK_LEVEL ? "disabled" : ""}`}
           onClick={() => coins >= luck2Cost && luckUpgrades.luckUpgrade2 < MAX_LUCK_LEVEL && onUpgradeLuck(2)}
           disabled={coins < luck2Cost || luckUpgrades.luckUpgrade2 >= MAX_LUCK_LEVEL}
         >
-          {luckUpgrades.luckUpgrade2 >= MAX_LUCK_LEVEL ? "MAX" : `💰 ${luck2Cost.toFixed(2)} Coins`}
+          {luckUpgrades.luckUpgrade2 >= MAX_LUCK_LEVEL ? "MAX" : coins < luck2Cost ? `Need ${(luck2Cost - coins).toFixed(0)} more` : `💰 ${luck2Cost.toFixed(2)} Coins`}
         </button>
       </div>
       <div className="shop-item-card">
@@ -394,15 +423,19 @@ function Shop({
           Increases epic & legendary drop rates.
           <br />
           <span className="upgrade-stats">
-            Level: {luckUpgrades.luckUpgrade3}/{MAX_LUCK_LEVEL} | +{(luckUpgrades.luckUpgrade3 * 3).toFixed(0)}% Epic, +{(luckUpgrades.luckUpgrade3 * 1).toFixed(0)}% Legendary
+            +{(luckUpgrades.luckUpgrade3 * 3).toFixed(0)}% Epic, +{(luckUpgrades.luckUpgrade3 * 1).toFixed(0)}% Legendary
           </span>
         </p>
+        <div className="upgrade-progress">
+          <div className="upgrade-progress-bar" style={{ width: `${(luckUpgrades.luckUpgrade3 / MAX_LUCK_LEVEL) * 100}%`, backgroundColor: '#a335ee' }} />
+          <span className="upgrade-progress-text">{luckUpgrades.luckUpgrade3}/{MAX_LUCK_LEVEL}</span>
+        </div>
         <button
           className={`shop-buy-btn ${coins < luck3Cost || luckUpgrades.luckUpgrade3 >= MAX_LUCK_LEVEL ? "disabled" : ""}`}
           onClick={() => coins >= luck3Cost && luckUpgrades.luckUpgrade3 < MAX_LUCK_LEVEL && onUpgradeLuck(3)}
           disabled={coins < luck3Cost || luckUpgrades.luckUpgrade3 >= MAX_LUCK_LEVEL}
         >
-          {luckUpgrades.luckUpgrade3 >= MAX_LUCK_LEVEL ? "MAX" : `💰 ${luck3Cost.toFixed(2)} Coins`}
+          {luckUpgrades.luckUpgrade3 >= MAX_LUCK_LEVEL ? "MAX" : coins < luck3Cost ? `Need ${(luck3Cost - coins).toFixed(0)} more` : `💰 ${luck3Cost.toFixed(2)} Coins`}
         </button>
       </div>
     </div>
@@ -433,10 +466,12 @@ function Shop({
                 onClick={() => !isDisabled && onPurchase(box.cost, box.id)}
                 disabled={isDisabled}
               >
-                {isOwned ? "✓ Owned" : 
-                 (box.id === 'bronze' && (hasSilver || hasGold)) || (box.id === 'silver' && hasGold) 
-                   ? "Replaced" 
-                   : `💰 ${box.cost} Coins`}
+                {isOwned ? "✓ Owned" :
+                 (box.id === 'bronze' && (hasSilver || hasGold)) || (box.id === 'silver' && hasGold)
+                   ? "Upgraded"
+                   : coins < box.cost
+                     ? `Need ${(box.cost - coins).toFixed(0)} more`
+                     : `💰 ${box.cost} Coins`}
               </button>
             </div>
           );
@@ -461,7 +496,7 @@ function Shop({
           onClick={() => !hasAutoSell && coins >= autoSellCost && onBuyAutoSell()}
           disabled={hasAutoSell || coins < autoSellCost}
         >
-          {hasAutoSell ? "✓ Owned" : `💰 ${autoSellCost} Coins`}
+          {hasAutoSell ? "✓ Owned" : coins < autoSellCost ? `Need ${(autoSellCost - coins).toFixed(0)} more` : `💰 ${autoSellCost} Coins`}
         </button>
       </div>
       <div className="shop-item-card">
@@ -475,7 +510,7 @@ function Shop({
           onClick={() => !hasPets && rebirthTokens >= petsCost && onBuyPets()}
           disabled={hasPets || rebirthTokens < petsCost}
         >
-          {hasPets ? "✓ Owned" : `🔄 ${petsCost} Rebirth Tokens`}
+          {hasPets ? "✓ Owned" : rebirthTokens < petsCost ? `Need ${petsCost - rebirthTokens} more` : `🔄 ${petsCost} Rebirth Tokens`}
         </button>
       </div>
     </div>
@@ -503,7 +538,7 @@ function Shop({
             onClick={() => !eggUpgrades[rarity] && coins >= cost && onBuyEggUpgrade(rarity)}
             disabled={eggUpgrades[rarity] || coins < cost}
           >
-            {eggUpgrades[rarity] ? "✓ Owned" : `💰 ${cost} Coins`}
+            {eggUpgrades[rarity] ? "✓ Owned" : coins < cost ? `Need ${(cost - coins).toFixed(0)} more` : `💰 ${cost} Coins`}
           </button>
         </div>
       ))}
@@ -652,6 +687,10 @@ function Inventory({
   const [bulkSellMode, setBulkSellMode] = useState(false);
   const [selectedForSell, setSelectedForSell] = useState<Set<string>>(new Set());
   const [showAutoSellSettings, setShowAutoSellSettings] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showBulkSellConfirm, setShowBulkSellConfirm] = useState(false);
+  const [showSellAllModal, setShowSellAllModal] = useState(false);
+  const [sellAllRarities, setSellAllRarities] = useState<Set<Rarity>>(new Set());
 
   const rarityOrder: Rarity[] = [
     Rarity.Legendary,
@@ -661,12 +700,23 @@ function Inventory({
     Rarity.Common,
   ];
 
-  const filteredItems =
-    filter === "all"
+  const filteredItems = useMemo(() => {
+    let result = filter === "all"
       ? [...items].sort(
           (a, b) => rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity)
         )
       : items.filter((item) => item.rarity === filter);
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((item) =>
+        item.name.toLowerCase().includes(query) ||
+        item.category.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [items, filter, searchQuery, rarityOrder]);
 
   const rarityCounts = items.reduce((acc, item) => {
     acc[item.rarity] = (acc[item.rarity] || 0) + 1;
@@ -699,25 +749,52 @@ function Inventory({
     }
   };
 
-  const handleBulkSell = () => {
+  const handleBulkSellClick = () => {
     if (selectedForSell.size > 0) {
-      onBulkSell(Array.from(selectedForSell));
-      setSelectedForSell(new Set());
-      setBulkSellMode(false);
+      setShowBulkSellConfirm(true);
     }
   };
 
+  const confirmBulkSell = () => {
+    onBulkSell(Array.from(selectedForSell));
+    setSelectedForSell(new Set());
+    setBulkSellMode(false);
+    setShowBulkSellConfirm(false);
+  };
+
   const getSelectedSellValue = () => {
-    const sellPrices: Record<Rarity, number> = {
-      [Rarity.Common]: 1,
-      [Rarity.Uncommon]: 2,
-      [Rarity.Rare]: 3,
-      [Rarity.Epic]: 5,
-      [Rarity.Legendary]: 10,
-    };
     return items
       .filter(item => selectedForSell.has(item.id))
-      .reduce((total, item) => total + sellPrices[item.rarity], 0);
+      .reduce((total, item) => total + SELL_PRICES[item.rarity], 0);
+  };
+
+  const getSellAllValue = () => {
+    return items
+      .filter(item => sellAllRarities.has(item.rarity))
+      .reduce((total, item) => total + SELL_PRICES[item.rarity], 0);
+  };
+
+  const getSellAllCount = () => {
+    return items.filter(item => sellAllRarities.has(item.rarity)).length;
+  };
+
+  const handleSellAllConfirm = () => {
+    const itemsToSell = items.filter(item => sellAllRarities.has(item.rarity)).map(i => i.id);
+    if (itemsToSell.length > 0) {
+      onBulkSell(itemsToSell);
+    }
+    setShowSellAllModal(false);
+    setSellAllRarities(new Set());
+  };
+
+  const toggleSellAllRarity = (rarity: Rarity) => {
+    const newSet = new Set(sellAllRarities);
+    if (newSet.has(rarity)) {
+      newSet.delete(rarity);
+    } else {
+      newSet.add(rarity);
+    }
+    setSellAllRarities(newSet);
   };
 
   return (
@@ -734,6 +811,12 @@ function Inventory({
                 {showAutoSellSettings ? '✓ Auto Sell' : '🔄 Auto Sell'}
               </button>
             )}
+            <button
+              className="sell-all-btn"
+              onClick={() => setShowSellAllModal(true)}
+            >
+              🗑️ Sell All
+            </button>
             <button
               className={`bulk-sell-mode-btn ${bulkSellMode ? 'active' : ''}`}
               onClick={() => {
@@ -764,6 +847,16 @@ function Inventory({
           </div>
         </div>
 
+        <div className="inventory-search">
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="inventory-search-input"
+          />
+        </div>
+
         <div className="inventory-tabs">
           <button
             className={`tab ${filter === "all" ? "active" : ""}`}
@@ -787,28 +880,19 @@ function Inventory({
             <h3>Auto Sell Settings</h3>
             <p className="auto-sell-desc">Select rarities to automatically sell when unboxed:</p>
             <div className="auto-sell-options">
-              {rarityOrder.map((rarity) => {
-                const sellPrices: Record<Rarity, number> = {
-                  [Rarity.Common]: 1,
-                  [Rarity.Uncommon]: 2,
-                  [Rarity.Rare]: 3,
-                  [Rarity.Epic]: 5,
-                  [Rarity.Legendary]: 10,
-                };
-                return (
-                  <label key={rarity} className="auto-sell-option" style={{ borderColor: RARITY_COLORS[rarity] }}>
-                    <input
-                      type="checkbox"
-                      checked={autoSellRarities.has(rarity)}
-                      onChange={() => onToggleAutoSellRarity(rarity)}
-                    />
-                    <span style={{ color: RARITY_COLORS[rarity] }}>
-                      {RARITY_EMOJIS[rarity]} {rarity}
-                    </span>
-                    <span className="auto-sell-price">+{sellPrices[rarity]} coins</span>
-                  </label>
-                );
-              })}
+              {rarityOrder.map((rarity) => (
+                <label key={rarity} className="auto-sell-option" style={{ borderColor: RARITY_COLORS[rarity] }}>
+                  <input
+                    type="checkbox"
+                    checked={autoSellRarities.has(rarity)}
+                    onChange={() => onToggleAutoSellRarity(rarity)}
+                  />
+                  <span style={{ color: RARITY_COLORS[rarity] }}>
+                    {RARITY_EMOJIS[rarity]} {rarity}
+                  </span>
+                  <span className="auto-sell-price">+{SELL_PRICES[rarity]} coins</span>
+                </label>
+              ))}
             </div>
           </div>
         )}
@@ -817,8 +901,8 @@ function Inventory({
           <div className="bulk-sell-info">
             <span>Selected: {selectedForSell.size} items ({getSelectedSellValue()} coins)</span>
             {selectedForSell.size > 0 && (
-              <button className="confirm-bulk-sell-btn" onClick={handleBulkSell}>
-                Sell All
+              <button className="confirm-bulk-sell-btn" onClick={handleBulkSellClick}>
+                Sell Selected
               </button>
             )}
           </div>
@@ -875,6 +959,68 @@ function Inventory({
             setSelectedItem(null);
           }}
         />
+      )}
+
+      {showBulkSellConfirm && (
+        <div className="confirm-modal-overlay" onClick={() => setShowBulkSellConfirm(false)}>
+          <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Confirm Sell</h3>
+            <p>Sell {selectedForSell.size} items for {getSelectedSellValue()} coins?</p>
+            <div className="confirm-modal-buttons">
+              <button className="confirm-cancel-btn" onClick={() => setShowBulkSellConfirm(false)}>
+                Cancel
+              </button>
+              <button className="confirm-sell-btn" onClick={confirmBulkSell}>
+                Sell
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSellAllModal && (
+        <div className="confirm-modal-overlay" onClick={() => { setShowSellAllModal(false); setSellAllRarities(new Set()); }}>
+          <div className="confirm-modal sell-all-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Sell All by Rarity</h3>
+            <p>Select rarities to sell:</p>
+            <div className="sell-all-rarity-options">
+              {rarityOrder.map((rarity) => {
+                const count = rarityCounts[rarity] || 0;
+                const value = count * SELL_PRICES[rarity];
+                return (
+                  <label key={rarity} className="sell-all-rarity-option" style={{ borderColor: RARITY_COLORS[rarity] }}>
+                    <input
+                      type="checkbox"
+                      checked={sellAllRarities.has(rarity)}
+                      onChange={() => toggleSellAllRarity(rarity)}
+                      disabled={count === 0}
+                    />
+                    <span style={{ color: count === 0 ? '#666' : RARITY_COLORS[rarity] }}>
+                      {RARITY_EMOJIS[rarity]} {rarity}
+                    </span>
+                    <span className="sell-all-count">{count} items</span>
+                    <span className="sell-all-value">{value}c</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="sell-all-summary">
+              Total: {getSellAllCount()} items for {getSellAllValue()} coins
+            </div>
+            <div className="confirm-modal-buttons">
+              <button className="confirm-cancel-btn" onClick={() => { setShowSellAllModal(false); setSellAllRarities(new Set()); }}>
+                Cancel
+              </button>
+              <button
+                className="confirm-sell-btn"
+                onClick={handleSellAllConfirm}
+                disabled={getSellAllCount() === 0}
+              >
+                Sell All
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1199,37 +1345,13 @@ export default function App() {
       playChestOpenSound(newLoot.rarity);
 
       // Award XP based on rarity
-      const xpRewards: Record<Rarity, number> = {
-        [Rarity.Common]: 1,
-        [Rarity.Uncommon]: 3,
-        [Rarity.Rare]: 8,
-        [Rarity.Epic]: 35,
-        [Rarity.Legendary]: 125,
-      };
-      const { xp: newXp, level: newLevel, coinReward: levelUpCoins } = addXp(xp, level, xpRewards[newLoot.rarity]);
+      const { xp: newXp, level: newLevel, coinReward: levelUpCoins } = addXp(xp, level, XP_REWARDS[newLoot.rarity]);
       setXp(newXp);
       setLevel(newLevel);
 
       // Award coins based on rarity + level up bonus
-      const coinRewards: Record<Rarity, number> = {
-        [Rarity.Common]: 0.1,
-        [Rarity.Uncommon]: 0.3,
-        [Rarity.Rare]: 1,
-        [Rarity.Epic]: 2.5,
-        [Rarity.Legendary]: 10,
-      };
-
-      // Sell prices for auto-sell
-      const sellPrices: Record<Rarity, number> = {
-        [Rarity.Common]: 1,
-        [Rarity.Uncommon]: 2,
-        [Rarity.Rare]: 3,
-        [Rarity.Epic]: 5,
-        [Rarity.Legendary]: 10,
-      };
-
-      const autoSellBonus = shouldAutoSell ? sellPrices[newLoot.rarity] : 0;
-      const earnedCoins = coinRewards[newLoot.rarity] + levelUpCoins + autoSellBonus;
+      const autoSellBonus = shouldAutoSell ? SELL_PRICES[newLoot.rarity] : 0;
+      const earnedCoins = COIN_REWARDS[newLoot.rarity] + levelUpCoins + autoSellBonus;
       setCoins((prev) => prev + earnedCoins);
 
       // Update stats
@@ -1283,30 +1405,13 @@ export default function App() {
     const item = inventory.find(i => i.id === itemId);
     if (!item) return;
 
-    const sellPrices: Record<Rarity, number> = {
-      [Rarity.Common]: 1,
-      [Rarity.Uncommon]: 2,
-      [Rarity.Rare]: 3,
-      [Rarity.Epic]: 5,
-      [Rarity.Legendary]: 10,
-    };
-
-    const sellPrice = sellPrices[item.rarity];
-    setCoins(prev => prev + sellPrice);
+    setCoins(prev => prev + SELL_PRICES[item.rarity]);
     setInventory(prev => prev.filter(i => i.id !== itemId));
   }, [inventory]);
 
   const handleBulkSell = useCallback((itemIds: string[]) => {
-    const sellPrices: Record<Rarity, number> = {
-      [Rarity.Common]: 1,
-      [Rarity.Uncommon]: 2,
-      [Rarity.Rare]: 3,
-      [Rarity.Epic]: 5,
-      [Rarity.Legendary]: 10,
-    };
-
     const itemsToSell = inventory.filter(i => itemIds.includes(i.id));
-    const totalValue = itemsToSell.reduce((total, item) => total + sellPrices[item.rarity], 0);
+    const totalValue = itemsToSell.reduce((total, item) => total + SELL_PRICES[item.rarity], 0);
 
     setCoins(prev => prev + totalValue);
     setInventory(prev => prev.filter(i => !itemIds.includes(i.id)));
@@ -1324,41 +1429,40 @@ export default function App() {
       [Rarity.Legendary]: 600,
     };
 
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+    const ctx = getAudioContext();
+    if (!ctx) return;
 
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
 
-      oscillator.frequency.value = frequencies[rarity];
-      oscillator.type = 'sine';
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
 
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    oscillator.frequency.value = frequencies[rarity];
+    oscillator.type = 'sine';
 
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.5);
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
 
-      // Add extra "sparkle" for rare items
-      if (rarity === Rarity.Epic || rarity === Rarity.Legendary) {
-        setTimeout(() => {
-          const osc2 = audioContext.createOscillator();
-          const gain2 = audioContext.createGain();
-          osc2.connect(gain2);
-          gain2.connect(audioContext.destination);
-          osc2.frequency.value = frequencies[rarity] * 2;
-          osc2.type = 'sine';
-          gain2.gain.setValueAtTime(0.2, audioContext.currentTime);
-          gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-          osc2.start(audioContext.currentTime);
-          osc2.stop(audioContext.currentTime + 0.3);
-        }, 100);
-      }
-    } catch (e) {
-      // Audio API not supported
-      console.log('Audio not supported');
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.5);
+
+    // Add extra "sparkle" for rare items
+    if (rarity === Rarity.Epic || rarity === Rarity.Legendary) {
+      setTimeout(() => {
+        const ctx2 = getAudioContext();
+        if (!ctx2) return;
+        const osc2 = ctx2.createOscillator();
+        const gain2 = ctx2.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx2.destination);
+        osc2.frequency.value = frequencies[rarity] * 2;
+        osc2.type = 'sine';
+        gain2.gain.setValueAtTime(0.2, ctx2.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, ctx2.currentTime + 0.3);
+        osc2.start(ctx2.currentTime);
+        osc2.stop(ctx2.currentTime + 0.3);
+      }, 100);
     }
   };
 

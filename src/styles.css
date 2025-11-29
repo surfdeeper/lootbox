@@ -44,6 +44,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  margin-top: 10rem;
 }
 
 .chest-container:hover {
@@ -2005,4 +2006,219 @@ body {
   font-size: 0.8rem;
   font-weight: bold;
   text-transform: capitalize;
+}
+
+/* Sell price in compact item cards */
+.loot-sell-price {
+  font-size: 0.75rem;
+  color: #ffd700;
+  font-weight: bold;
+  margin-left: auto;
+  padding: 0.2rem 0.5rem;
+  background: rgba(255, 215, 0, 0.15);
+  border-radius: 4px;
+}
+
+/* Inventory Search */
+.inventory-search {
+  padding: 0 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.inventory-search-input {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.inventory-search-input:focus {
+  border-color: #0070dd;
+  box-shadow: 0 0 10px rgba(0, 112, 221, 0.3);
+}
+
+.inventory-search-input::placeholder {
+  color: #666;
+}
+
+/* Sell All Button */
+.sell-all-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  border: 1px solid #ef4444;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sell-all-btn:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+/* Confirmation Modal */
+.confirm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.confirm-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 1.5rem;
+  min-width: 300px;
+  max-width: 400px;
+}
+
+.confirm-modal h3 {
+  margin: 0 0 1rem 0;
+  color: #fff;
+  font-size: 1.2rem;
+}
+
+.confirm-modal p {
+  color: #ccc;
+  margin-bottom: 1.5rem;
+}
+
+.confirm-modal-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.confirm-cancel-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.confirm-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.confirm-sell-btn {
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #ffd700 0%, #b8960b 100%);
+  border: none;
+  border-radius: 6px;
+  color: #1a1a2e;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.confirm-sell-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ffed4e 0%, #ffd700 100%);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+
+.confirm-sell-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Sell All Modal */
+.sell-all-modal {
+  min-width: 350px;
+}
+
+.sell-all-rarity-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sell-all-rarity-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sell-all-rarity-option:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.sell-all-rarity-option input {
+  cursor: pointer;
+}
+
+.sell-all-rarity-option input:disabled {
+  cursor: not-allowed;
+}
+
+.sell-all-count {
+  margin-left: auto;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.sell-all-value {
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+
+.sell-all-summary {
+  text-align: center;
+  padding: 0.75rem;
+  background: rgba(255, 215, 0, 0.1);
+  border-radius: 6px;
+  color: #ffd700;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+/* Shop Upgrade Progress Bars */
+.upgrade-progress {
+  position: relative;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0.75rem 0;
+}
+
+.upgrade-progress-bar {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.3s ease;
+}
+
+.upgrade-progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }

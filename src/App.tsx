@@ -831,9 +831,13 @@ function isArmor(item: LootItem): boolean {
 
 // Generate enemy weapon power based on wave
 function generateEnemyPower(wave: number, slotIndex: number): number {
-  const basePower = 20 + (wave - 1) * 15;
-  const variance = (Math.random() - 0.5) * 20;
-  return Math.max(10, basePower + variance + slotIndex * 5);
+  // Start at 50 base power, increasing by 20 per wave
+  const basePower = 50 + (wave - 1) * 20;
+  // Add random variance of ±30% of base power for each enemy
+  const variance = (Math.random() - 0.5) * (basePower * 0.6);
+  // Add slight bonus for later slots (enemies get slightly harder within a wave)
+  const slotBonus = slotIndex * 8;
+  return Math.max(30, Math.round(basePower + variance + slotBonus));
 }
 
 function BattleMenu({
@@ -926,7 +930,7 @@ function BattleMenu({
                           {item.name}
                         </span>
                         <span className="battle-slot-power">
-                          {isArmor(item) ? '🛡️' : '⚡'} {Math.round(getWeaponPower(item))}
+                          {(isArmor(item) || isShield(item)) ? '🛡️' : '⚡'} {Math.round(getWeaponPower(item))}
                         </span>
                         <button
                           className="battle-slot-clear"
@@ -971,7 +975,7 @@ function BattleMenu({
                         <span className="weapon-name" style={{ color: RARITY_COLORS[weapon.rarity] }}>
                           {weapon.name}
                         </span>
-                        <span className="weapon-power">{isArmor(weapon) ? '🛡️' : '⚡'} {Math.round(getWeaponPower(weapon))}</span>
+                        <span className="weapon-power">{(isArmor(weapon) || isShield(weapon)) ? '🛡️' : '⚡'} {Math.round(getWeaponPower(weapon))}</span>
                         {isEquipped && <span className="equipped-badge">Equipped</span>}
                       </div>
                     );
@@ -2135,8 +2139,8 @@ export default function App() {
         }
       }
     }
-    // Distribute shield reduction equally among all 5 enemies
-    const shieldReductionPerEnemy = totalShieldReduction / 5;
+    // Apply full shield reduction to all enemies equally
+    const shieldReductionPerEnemy = totalShieldReduction;
 
     for (let i = 0; i < 5; i++) {
       const slotId = battleSlots[i];
@@ -2208,7 +2212,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="version-tracker">vs: 1.00</div>
+      <div className="version-tracker">vs: 1.01</div>
       <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} rebirthCount={rebirthCount} stats={stats} />
 
       {hasAutoOpen && (

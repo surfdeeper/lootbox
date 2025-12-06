@@ -602,21 +602,57 @@ interface Pet {
   name: string;
   type: "dog" | "cat";
   rarity: Rarity;
+  bonus: number; // Dogs: +X% coin gen, Cats: +X% legendary drop
+  count: number; // Number of stacked pets
+}
+
+// Calculate pet bonus range based on rarity
+// Dogs: 5-230% coin generation (scaled by rarity)
+// Cats: 5-55% legendary drop chance (scaled by rarity)
+function getPetBonusRange(type: "dog" | "cat", rarity: Rarity): { min: number; max: number } {
+  const rarityMultipliers: Record<Rarity, number> = {
+    [Rarity.Common]: 0.1,
+    [Rarity.Uncommon]: 0.25,
+    [Rarity.Rare]: 0.5,
+    [Rarity.Epic]: 0.75,
+    [Rarity.Legendary]: 1.0,
+  };
+  const mult = rarityMultipliers[rarity];
+
+  if (type === "dog") {
+    // Dogs: 5-230% coin generation
+    return { min: 5 + mult * 25, max: 30 + mult * 200 };
+  } else {
+    // Cats: 5-55% legendary drop chance
+    return { min: 5 + mult * 5, max: 10 + mult * 45 };
+  }
+}
+
+function generatePetBonus(type: "dog" | "cat", rarity: Rarity): number {
+  const { min, max } = getPetBonusRange(type, rarity);
+  return Math.round(min + Math.random() * (max - min));
 }
 
 function PetsMenu({
   onClose,
   eggs,
   pets,
-  onHatchEgg
+  equippedPets,
+  onHatchEgg,
+  onEquipPet,
+  onUnequipPet
 }: {
   onClose: () => void;
   eggs: { rarity: Rarity; id: string }[];
   pets: Pet[];
+  equippedPets: string[];
   onHatchEgg: (eggId: string) => void;
+  onEquipPet: (petId: string) => void;
+  onUnequipPet: (petId: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<PetsTab>("pets");
   const [selectedEgg, setSelectedEgg] = useState<{ rarity: Rarity; id: string } | null>(null);
+  const [selectingSlot, setSelectingSlot] = useState<number | null>(null);
 
   const renderPetsContent = () => (
     <div className="pets-grid">
@@ -627,29 +663,101 @@ function PetsMenu({
           <div key={pet.id} className="pet-slot has-pet" style={{ borderColor: RARITY_COLORS[pet.rarity] }}>
             <div className="pet-slot-content" style={{ borderColor: RARITY_COLORS[pet.rarity] }}>
               <span className="pet-emoji">{pet.type === "dog" ? "🐕" : "🐈"}</span>
+              {pet.count > 1 && (
+                <span className="pet-count" style={{ backgroundColor: RARITY_COLORS[pet.rarity] }}>
+                  x{pet.count}
+                </span>
+              )}
             </div>
             <span className="pet-name" style={{ color: RARITY_COLORS[pet.rarity] }}>{pet.name}</span>
+            <span className="pet-bonus" style={{ color: RARITY_COLORS[pet.rarity] }}>
+              +{pet.bonus || 0}% {pet.type === "dog" ? "Coins" : "Legendary"}
+            </span>
           </div>
         ))
       )}
     </div>
   );
 
-  const renderEquipPetsContent = () => (
-    <div className="equip-pets-content">
-      <div className="equip-slots-grid">
-        {[1, 2, 3, 4, 5, 6].map((slot) => (
-          <div key={slot} className="equip-slot">
-            <div className="equip-slot-content">
-              <span className="equip-slot-empty">?</span>
+  const renderEquipPetsContent = () => {
+    // Get unequipped pets for the selection modal
+    const unequippedPets = pets.filter(pet => !equippedPets.includes(pet.id));
+
+    return (
+      <div className="equip-pets-content">
+        <div className="equip-slots-grid">
+          {[0, 1, 2, 3, 4, 5].map((slotIndex) => {
+            const equippedPetId = equippedPets[slotIndex];
+            const equippedPet = equippedPetId ? pets.find(p => p.id === equippedPetId) : null;
+
+            return (
+              <div key={slotIndex} className={`equip-slot ${equippedPet ? 'has-pet' : ''}`} style={equippedPet ? { borderColor: RARITY_COLORS[equippedPet.rarity] } : undefined}>
+                <div className="equip-slot-content" style={equippedPet ? { borderColor: RARITY_COLORS[equippedPet.rarity] } : undefined}>
+                  {equippedPet ? (
+                    <span className="pet-emoji">{equippedPet.type === "dog" ? "🐕" : "🐈"}</span>
+                  ) : (
+                    <span className="equip-slot-empty">?</span>
+                  )}
+                </div>
+                {equippedPet ? (
+                  <>
+                    <span className="pet-name" style={{ color: RARITY_COLORS[equippedPet.rarity] }}>{equippedPet.name}</span>
+                    <span className="pet-bonus" style={{ color: RARITY_COLORS[equippedPet.rarity] }}>
+                      +{equippedPet.bonus || 0}% {equippedPet.type === "dog" ? "Coins" : "Legendary"}
+                    </span>
+                    <button className="equip-slot-btn unequip" onClick={() => onUnequipPet(equippedPetId)}>Unequip</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="equip-slot-label">Slot {slotIndex + 1}</span>
+                    <button
+                      className="equip-slot-btn"
+                      onClick={() => setSelectingSlot(slotIndex)}
+                      disabled={unequippedPets.length === 0}
+                    >
+                      Equip
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {selectingSlot !== null && (
+          <div className="pet-select-overlay" onClick={() => setSelectingSlot(null)}>
+            <div className="pet-select-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Select a Pet to Equip</h3>
+              <div className="pet-select-grid">
+                {unequippedPets.length === 0 ? (
+                  <p className="no-pets-message">No unequipped pets available.</p>
+                ) : (
+                  unequippedPets.map((pet) => (
+                    <div
+                      key={pet.id}
+                      className="pet-select-item"
+                      style={{ borderColor: RARITY_COLORS[pet.rarity] }}
+                      onClick={() => {
+                        onEquipPet(pet.id);
+                        setSelectingSlot(null);
+                      }}
+                    >
+                      <span className="pet-emoji">{pet.type === "dog" ? "🐕" : "🐈"}</span>
+                      <span className="pet-name" style={{ color: RARITY_COLORS[pet.rarity] }}>{pet.name}</span>
+                      <span className="pet-bonus" style={{ color: RARITY_COLORS[pet.rarity] }}>
+                        +{pet.bonus || 0}% {pet.type === "dog" ? "Coins" : "Legendary"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <button className="pet-select-close" onClick={() => setSelectingSlot(null)}>Cancel</button>
             </div>
-            <span className="equip-slot-label">Slot {slot}</span>
-            <button className="equip-slot-btn">Equip</button>
           </div>
-        ))}
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderOpenPetsContent = () => {
     const rarities: Rarity[] = [Rarity.Common, Rarity.Uncommon, Rarity.Rare, Rarity.Epic, Rarity.Legendary];
@@ -831,6 +939,14 @@ function isArmor(item: LootItem): boolean {
 
 // Generate enemy weapon power based on wave
 function generateEnemyPower(wave: number, slotIndex: number): number {
+  // Wave 1 is easier to help new players learn the system
+  if (wave === 1) {
+    const basePower = 25; // Much lower base for first battle
+    const variance = (Math.random() - 0.5) * (basePower * 0.4); // Less variance
+    const slotBonus = slotIndex * 3; // Smaller slot bonus
+    return Math.max(15, Math.round(basePower + variance + slotBonus));
+  }
+
   // Start at 50 base power, increasing by 20 per wave
   const basePower = 50 + (wave - 1) * 20;
   // Add random variance of ±30% of base power for each enemy
@@ -862,6 +978,7 @@ function BattleMenu({
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [battleResults, setBattleResults] = useState<{ playerPower: number; enemyPower: number; won: boolean }[] | null>(null);
   const [battleWon, setBattleWon] = useState<boolean | null>(null);
+  const [autoBattleResults, setAutoBattleResults] = useState<{ wins: number; losses: number; totalCoins: number } | null>(null);
 
   // Filter inventory to only show weapons, armor, and shields, sorted by power (best first, shields at end)
   const weaponCategories = [ItemCategory.Pistol, ItemCategory.Rifle, ItemCategory.SMG, ItemCategory.Shotgun, ItemCategory.Sniper, ItemCategory.Heavy, ItemCategory.Armor, ItemCategory.Shield];
@@ -889,6 +1006,34 @@ function BattleMenu({
     onUpdateSlots(newSlots);
   };
 
+  // Auto-equip the best available weapons to empty slots
+  const handleAutoEquip = () => {
+    const newSlots = [...battleSlots];
+    const equippedIds = new Set(newSlots.filter(id => id !== null));
+
+    // Get unequipped weapons sorted by power (best first), but put shields at the end
+    const availableWeapons = weapons
+      .filter(w => !equippedIds.has(w.id))
+      .sort((a, b) => {
+        // Prioritize non-shields first
+        const aIsShield = isShield(a);
+        const bIsShield = isShield(b);
+        if (aIsShield && !bIsShield) return 1;
+        if (!aIsShield && bIsShield) return -1;
+        return getWeaponPower(b) - getWeaponPower(a);
+      });
+
+    // Fill empty slots with best available weapons
+    for (let i = 0; i < 5; i++) {
+      if (newSlots[i] === null && availableWeapons.length > 0) {
+        const weapon = availableWeapons.shift()!;
+        newSlots[i] = weapon.id;
+      }
+    }
+
+    onUpdateSlots(newSlots);
+  };
+
   const handleBattle = () => {
     const { won, results } = onBattle();
     setBattleResults(results);
@@ -898,6 +1043,28 @@ function BattleMenu({
   const handleCloseBattleResults = () => {
     setBattleResults(null);
     setBattleWon(null);
+  };
+
+  const handleAutoBattle = () => {
+    let wins = 0;
+    let losses = 0;
+    let totalCoins = 0;
+
+    for (let i = 0; i < 10; i++) {
+      const { won, coinsEarned } = onBattle();
+      if (won) {
+        wins++;
+        totalCoins += coinsEarned || 0;
+      } else {
+        losses++;
+      }
+    }
+
+    setAutoBattleResults({ wins, losses, totalCoins });
+  };
+
+  const handleCloseAutoBattleResults = () => {
+    setAutoBattleResults(null);
   };
 
   const filledSlots = battleSlots.filter(s => s !== null).length;
@@ -918,13 +1085,18 @@ function BattleMenu({
           <span className="reward-label">Win Reward:</span>
           <span className="reward-coins">
             {(() => {
-              const baseCoins = 5 + wave;
+              let baseCoins = 5 + wave;
+              // Early wave bonus (waves 1-3)
+              if (wave <= 3) {
+                baseCoins += (4 - wave) * 3;
+              }
               const streakBonus = Math.min((streak + 1) * 0.10, 1.0);
               const rebirthBonus = rebirthCount * 0.10;
               const total = baseCoins * (1 + rebirthBonus) * (1 + streakBonus);
               return `${total.toFixed(1)} coins`;
             })()}
           </span>
+          {wave <= 3 && <span className="early-wave-bonus">Early wave bonus!</span>}
           <span className="reward-drop">+ chance for rare+ drop</span>
         </div>
 
@@ -971,6 +1143,21 @@ function BattleMenu({
                 );
               })}
             </div>
+            {weapons.length > 0 && filledSlots < 5 && (
+              <button className="auto-equip-btn" onClick={handleAutoEquip}>
+                ⚡ Auto-Equip Best Weapons
+              </button>
+            )}
+            {wave === 1 && filledSlots === 0 && weapons.length > 0 && (
+              <div className="battle-tutorial">
+                <p>💡 <strong>Tip:</strong> Click "Auto-Equip" to quickly fill your slots with your best weapons, or click on empty slots to manually select weapons.</p>
+              </div>
+            )}
+            {wave === 1 && weapons.length === 0 && (
+              <div className="battle-tutorial">
+                <p>💡 <strong>Tip:</strong> You need weapons to battle! Open some chests first to find pistols, rifles, armor, and more.</p>
+              </div>
+            )}
           </div>
 
           {selectedSlot !== null && (
@@ -1005,13 +1192,22 @@ function BattleMenu({
             </div>
           )}
 
-          <button
-            className={`battle-fight-btn ${!canBattle ? 'disabled' : ''}`}
-            onClick={handleBattle}
-            disabled={!canBattle}
-          >
-            ⚔️ Fight Wave {wave}!
-          </button>
+          <div className="battle-buttons">
+            <button
+              className={`battle-fight-btn ${!canBattle ? 'disabled' : ''}`}
+              onClick={handleBattle}
+              disabled={!canBattle}
+            >
+              ⚔️ Fight Wave {wave}!
+            </button>
+            <button
+              className={`battle-auto-btn ${!canBattle ? 'disabled' : ''}`}
+              onClick={handleAutoBattle}
+              disabled={!canBattle}
+            >
+              ⚔️ Auto x10
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1040,6 +1236,21 @@ function BattleMenu({
               )}
             </div>
             <button className="battle-results-close-btn" onClick={handleCloseBattleResults}>
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+      {autoBattleResults && (
+        <div className="battle-results-overlay" onClick={handleCloseAutoBattleResults}>
+          <div className="battle-results-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>⚔️ Auto Battle Complete!</h2>
+            <div className="auto-battle-summary">
+              <p>Wins: {autoBattleResults.wins}/10</p>
+              <p>Losses: {autoBattleResults.losses}/10</p>
+              <p>Total Coins: +{autoBattleResults.totalCoins.toFixed(1)}</p>
+            </div>
+            <button className="battle-results-close-btn" onClick={handleCloseAutoBattleResults}>
               Continue
             </button>
           </div>
@@ -1765,6 +1976,7 @@ export default function App() {
   });
   const [eggs, setEggs] = useState<{ rarity: Rarity; id: string }[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
+  const [equippedPets, setEquippedPets] = useState<string[]>([]);
   const [recentEgg, setRecentEgg] = useState<Rarity | null>(null);
   const [levelUpNotification, setLevelUpNotification] = useState<number | null>(null);
   const [dropsHistory, setDropsHistory] = useState<LootItem[]>([]);
@@ -1814,7 +2026,15 @@ export default function App() {
         legendary: false,
       });
       setEggs((save.eggs || []).map(e => ({ ...e, rarity: e.rarity as Rarity })));
-      setPets((save.pets || []).map(p => ({ ...p, rarity: p.rarity as Rarity, type: p.type as "dog" | "cat" })));
+      setPets((save.pets || []).map(p => {
+        const rarity = p.rarity as Rarity;
+        const type = p.type as "dog" | "cat";
+        // Migrate old pets: generate bonus if missing, default count to 1
+        const bonus = (p as { bonus?: number }).bonus ?? generatePetBonus(type, rarity);
+        const count = (p as { count?: number }).count ?? 1;
+        return { id: p.id, name: p.name, rarity, type, bonus, count };
+      }));
+      setEquippedPets(save.equippedPets || []);
       setDropsHistory((save.dropsHistory || []).map(d => ({ ...d, rarity: d.rarity as Rarity, category: d.category as ItemCategory })));
       setRebirthTokens(save.rebirth?.tokens || 0);
       setRebirthCount(save.rebirth?.count || 0);
@@ -1873,6 +2093,7 @@ export default function App() {
       },
       eggs,
       pets,
+      equippedPets,
       dropsHistory,
       stats,
       purchasedBoxes,
@@ -1882,7 +2103,7 @@ export default function App() {
       },
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, dropsHistory, battleWave, battleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
 
   // Show level-up notification - only when level actually increases from gameplay
   const prevLevelRef = useRef<number>(level);
@@ -1897,6 +2118,13 @@ export default function App() {
     prevLevelRef.current = level;
   }, [level, isLoaded]);
 
+  // Calculate total dog bonus for coin generation (only equipped pets)
+  const totalDogBonus = useMemo(() => {
+    return pets
+      .filter(pet => pet.type === "dog" && equippedPets.includes(pet.id))
+      .reduce((sum, pet) => sum + (pet.bonus || 0), 0);
+  }, [pets, equippedPets]);
+
   // Idle coin generation
   useEffect(() => {
     if (coinGeneratorLevel <= 0) return;
@@ -1904,12 +2132,13 @@ export default function App() {
     const interval = setInterval(() => {
       const baseCoinsPerSecond = coinGeneratorLevel * 0.01;
       const rebirthBonus = rebirthCount * 0.10; // 10% per rebirth
-      const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus);
+      const dogBonus = totalDogBonus / 100; // Convert percentage to multiplier
+      const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus + dogBonus);
       setCoins((prev) => prev + coinsPerSecond / 10); // Divide by 10 since we run 10 times per second
     }, 100);
 
     return () => clearInterval(interval);
-  }, [coinGeneratorLevel, rebirthCount]);
+  }, [coinGeneratorLevel, rebirthCount, totalDogBonus]);
 
   // Auto-open chests with progress tracking
   useEffect(() => {
@@ -1940,37 +2169,54 @@ export default function App() {
     };
   }, [hasAutoOpen, isLoaded, isOpening, showInventory, showShop, showPets, showDropsHistory, showBattle]);
 
+  // Calculate total cat bonus for legendary drop chance (only equipped pets)
+  const totalCatBonus = useMemo(() => {
+    return pets
+      .filter(pet => pet.type === "cat" && equippedPets.includes(pet.id))
+      .reduce((sum, pet) => sum + (pet.bonus || 0), 0);
+  }, [pets, equippedPets]);
+
   const getBoxRarityWeights = useCallback((): Record<Rarity, number> => {
     const baseWeights = calculateRarityWeights(luckUpgrades);
-    
+    let weights = { ...baseWeights };
+
     // Apply box upgrades on top of luck upgrades
     if (purchasedBoxes.includes('gold')) {
       // Gold box: +15% epic, +5% legendary, -20% common
-      return {
-        ...baseWeights,
-        [Rarity.Common]: Math.max(0, baseWeights[Rarity.Common] - 20),
-        [Rarity.Epic]: baseWeights[Rarity.Epic] + 15,
-        [Rarity.Legendary]: baseWeights[Rarity.Legendary] + 5,
+      weights = {
+        ...weights,
+        [Rarity.Common]: Math.max(0, weights[Rarity.Common] - 20),
+        [Rarity.Epic]: weights[Rarity.Epic] + 15,
+        [Rarity.Legendary]: weights[Rarity.Legendary] + 5,
       };
     } else if (purchasedBoxes.includes('silver')) {
       // Silver box: +10% rare, +5% uncommon, -15% common
-      return {
-        ...baseWeights,
-        [Rarity.Common]: Math.max(0, baseWeights[Rarity.Common] - 15),
-        [Rarity.Uncommon]: baseWeights[Rarity.Uncommon] + 5,
-        [Rarity.Rare]: baseWeights[Rarity.Rare] + 10,
+      weights = {
+        ...weights,
+        [Rarity.Common]: Math.max(0, weights[Rarity.Common] - 15),
+        [Rarity.Uncommon]: weights[Rarity.Uncommon] + 5,
+        [Rarity.Rare]: weights[Rarity.Rare] + 10,
       };
     } else if (purchasedBoxes.includes('bronze')) {
       // Bronze box: +8% uncommon, -8% common
-      return {
-        ...baseWeights,
-        [Rarity.Common]: Math.max(0, baseWeights[Rarity.Common] - 8),
-        [Rarity.Uncommon]: baseWeights[Rarity.Uncommon] + 8,
+      weights = {
+        ...weights,
+        [Rarity.Common]: Math.max(0, weights[Rarity.Common] - 8),
+        [Rarity.Uncommon]: weights[Rarity.Uncommon] + 8,
       };
     }
-    
-    return baseWeights;
-  }, [luckUpgrades, purchasedBoxes]);
+
+    // Apply cat bonus to legendary drop chance (additive percentage)
+    if (totalCatBonus > 0) {
+      const legendaryBoost = totalCatBonus / 100 * weights[Rarity.Legendary];
+      weights = {
+        ...weights,
+        [Rarity.Legendary]: weights[Rarity.Legendary] + legendaryBoost,
+      };
+    }
+
+    return weights;
+  }, [luckUpgrades, purchasedBoxes, totalCatBonus]);
 
   const openChest = () => {
     if (isOpening) return;
@@ -2146,6 +2392,7 @@ export default function App() {
       },
       eggs,
       pets,
+      equippedPets,
       dropsHistory,
       stats,
       purchasedBoxes,
@@ -2155,7 +2402,7 @@ export default function App() {
       },
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, dropsHistory, battleWave, battleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
 
   const exportSave = useCallback(() => {
     const save: GameSave = {
@@ -2180,6 +2427,7 @@ export default function App() {
       },
       eggs,
       pets,
+      equippedPets,
       dropsHistory,
       stats,
       purchasedBoxes,
@@ -2197,7 +2445,7 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, dropsHistory, battleWave, battleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
 
   const importSave = useCallback((data: string): boolean => {
     try {
@@ -2225,7 +2473,15 @@ export default function App() {
       setHasPets(save.upgrades?.hasPets || false);
       setEggUpgrades(save.upgrades?.eggUpgrades || { common: false, uncommon: false, rare: false, epic: false, legendary: false });
       setEggs((save.eggs || []).map(e => ({ ...e, rarity: e.rarity as Rarity })));
-      setPets((save.pets || []).map(p => ({ ...p, rarity: p.rarity as Rarity, type: p.type as "dog" | "cat" })));
+      setPets((save.pets || []).map(p => {
+        const rarity = p.rarity as Rarity;
+        const type = p.type as "dog" | "cat";
+        // Migrate old pets: generate bonus if missing, default count to 1
+        const bonus = (p as { bonus?: number }).bonus ?? generatePetBonus(type, rarity);
+        const count = (p as { count?: number }).count ?? 1;
+        return { id: p.id, name: p.name, rarity, type, bonus, count };
+      }));
+      setEquippedPets(save.equippedPets || []);
       setDropsHistory((save.dropsHistory || []).map(d => ({ ...d, rarity: d.rarity as Rarity, category: d.category as ItemCategory })));
       setRebirthTokens(save.rebirth?.tokens || 0);
       setRebirthCount(save.rebirth?.count || 0);
@@ -2253,14 +2509,33 @@ export default function App() {
     const petType: "dog" | "cat" = Math.random() < 0.5 ? "dog" : "cat";
     const petName = petType === "dog" ? "Dog" : "Cat";
 
-    const newPet: Pet = {
-      id: crypto.randomUUID(),
-      name: petName,
-      type: petType,
-      rarity: egg.rarity,
-    };
+    const bonus = generatePetBonus(petType, egg.rarity);
 
-    setPets(prev => [...prev, newPet]);
+    // Check if a pet with the same type and rarity already exists
+    setPets(prev => {
+      const existingPetIndex = prev.findIndex(p => p.type === petType && p.rarity === egg.rarity);
+      if (existingPetIndex !== -1) {
+        // Stack: increment count and add bonus
+        const updated = [...prev];
+        updated[existingPetIndex] = {
+          ...updated[existingPetIndex],
+          bonus: updated[existingPetIndex].bonus + bonus,
+          count: updated[existingPetIndex].count + 1,
+        };
+        return updated;
+      } else {
+        // Create new pet with count: 1
+        const newPet: Pet = {
+          id: crypto.randomUUID(),
+          name: petName,
+          type: petType,
+          rarity: egg.rarity,
+          bonus,
+          count: 1,
+        };
+        return [...prev, newPet];
+      }
+    });
   }, [eggs]);
 
   const getRebirthCost = useCallback(() => {
@@ -2349,7 +2624,13 @@ export default function App() {
 
     if (won) {
       // Scale rewards with wave: base 5 + wave number
-      const baseCoins = 5 + battleWave;
+      let baseCoins = 5 + battleWave;
+
+      // Early wave bonus to encourage new players (waves 1-3 get extra coins)
+      if (battleWave <= 3) {
+        const earlyWaveBonus = (4 - battleWave) * 3; // Wave 1: +9, Wave 2: +6, Wave 3: +3
+        baseCoins += earlyWaveBonus;
+      }
 
       // Streak bonus: +10% per consecutive win (max 100% at 10 streak)
       const newStreak = battleStreak + 1;
@@ -2591,7 +2872,21 @@ export default function App() {
       )}
 
       {showPets && (
-        <PetsMenu onClose={() => setShowPets(false)} eggs={eggs} pets={pets} onHatchEgg={handleHatchEgg} />
+        <PetsMenu
+          onClose={() => setShowPets(false)}
+          eggs={eggs}
+          pets={pets}
+          equippedPets={equippedPets}
+          onHatchEgg={handleHatchEgg}
+          onEquipPet={(petId) => {
+            if (equippedPets.length < 6 && !equippedPets.includes(petId)) {
+              setEquippedPets([...equippedPets, petId]);
+            }
+          }}
+          onUnequipPet={(petId) => {
+            setEquippedPets(equippedPets.filter(id => id !== petId));
+          }}
+        />
       )}
 
       {showBattle && (

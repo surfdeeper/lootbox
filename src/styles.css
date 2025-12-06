@@ -1848,6 +1848,7 @@ body {
 }
 
 .pet-slot-content {
+  position: relative;
   width: 60px;
   height: 60px;
   background: rgba(16, 185, 129, 0.1);
@@ -1861,6 +1862,20 @@ body {
 .pet-placeholder {
   font-size: 1.5rem;
   color: #666;
+}
+
+.pet-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: #fff;
+  min-width: 20px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .pet-equip-btn {
@@ -2193,6 +2208,99 @@ body {
   background: #10b981;
 }
 
+.equip-slot-btn:disabled {
+  background: #444;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.equip-slot-btn.unequip {
+  background: #dc2626;
+}
+
+.equip-slot-btn.unequip:hover {
+  background: #ef4444;
+}
+
+.equip-slot.has-pet {
+  border-width: 2px;
+  border-style: solid;
+}
+
+.equip-slot.has-pet .equip-slot-content {
+  border-style: solid;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Pet Selection Modal */
+.pet-select-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.pet-select-modal {
+  background: #1a1a2e;
+  border: 2px solid #4a4a6a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.pet-select-modal h3 {
+  margin: 0 0 1rem;
+  color: #fff;
+  text-align: center;
+}
+
+.pet-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.pet-select-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: #2a2a4e;
+  border: 2px solid #4a4a6a;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pet-select-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.pet-select-close {
+  width: 100%;
+  padding: 0.75rem;
+  background: #444;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pet-select-close:hover {
+  background: #555;
+}
+
 .egg-item.clickable {
   cursor: pointer;
 }
@@ -2228,6 +2336,12 @@ body {
   font-size: 0.85rem;
   font-weight: bold;
   text-transform: capitalize;
+}
+
+.pet-bonus {
+  font-size: 0.7rem;
+  opacity: 0.9;
+  font-weight: 500;
 }
 
 /* Hatch Modal */
@@ -3165,6 +3279,55 @@ body {
   background: rgba(100, 100, 100, 0.5);
   color: #666;
   cursor: not-allowed;
+}
+
+/* Auto-Equip Button */
+.auto-equip-btn {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auto-equip-btn:hover {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  transform: scale(1.02);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+}
+
+/* Battle Tutorial */
+.battle-tutorial {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+}
+
+.battle-tutorial p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #93c5fd;
+  line-height: 1.4;
+}
+
+/* Early Wave Bonus Badge */
+.early-wave-bonus {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #fff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-left: 0.5rem;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 /* Battle Results Modal */

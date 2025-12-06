@@ -177,6 +177,14 @@ function getWeaponPower(item: LootItem): number {
 }
 
 function generateEnemyPower(wave: number, slotIndex: number): number {
+  // Wave 1 is easier to help new players learn the system
+  if (wave === 1) {
+    const basePower = 25; // Much lower base for first battle
+    const variance = (Math.random() - 0.5) * (basePower * 0.4); // Less variance
+    const slotBonus = slotIndex * 3; // Smaller slot bonus
+    return Math.max(15, Math.round(basePower + variance + slotBonus));
+  }
+
   const basePower = 50 + (wave - 1) * 20;
   const variance = (Math.random() - 0.5) * (basePower * 0.6);
   const slotBonus = slotIndex * 8;
@@ -983,7 +991,13 @@ const botActions: BotAction[] = [
 
     if (won) {
       // Scale rewards with wave: base 5 + wave number
-      const baseCoins = 5 + state.battleWave;
+      let baseCoins = 5 + state.battleWave;
+
+      // Early wave bonus to encourage new players (waves 1-3 get extra coins)
+      if (state.battleWave <= 3) {
+        const earlyWaveBonus = (4 - state.battleWave) * 3; // Wave 1: +9, Wave 2: +6, Wave 3: +3
+        baseCoins += earlyWaveBonus;
+      }
 
       // Streak bonus: +10% per consecutive win (max 100% at 10 streak)
       const newStreak = state.battleStreak + 1;
@@ -1144,8 +1158,11 @@ export function runBotTest(config: BotTestConfig): TestResult[] {
       const result = action(state);
       state = result.state;
 
-      // Count actions
-      const baseActionName = result.actionName.split("_")[0];
+      // Count actions - preserve battle_won and battle_lost for detailed tracking
+      let baseActionName = result.actionName.split("_")[0];
+      if (result.actionName === "battle_won" || result.actionName === "battle_lost") {
+        baseActionName = result.actionName; // Keep full name for battle results
+      }
       actionCounts[baseActionName] = (actionCounts[baseActionName] || 0) + 1;
 
       // Validate state after action
@@ -1281,6 +1298,31 @@ export function generateTestReport(results: TestResult[]): string {
   lines.push(`Average chests opened: ${avgChestsOpened.toFixed(0)}`);
   lines.push(`Average rebirths: ${avgRebirths.toFixed(2)}`);
   lines.push("");
+
+  // Battle statistics
+  const totalBattleWins = allActions["battle_won"] || 0;
+  const totalBattleLosses = allActions["battle_lost"] || 0;
+  const totalBattles = totalBattleWins + totalBattleLosses;
+
+  if (totalBattles > 0) {
+    lines.push("BATTLE STATISTICS");
+    lines.push("-".repeat(40));
+    const winRate = ((totalBattleWins / totalBattles) * 100).toFixed(1);
+    lines.push(`Total battles: ${totalBattles.toLocaleString()}`);
+    lines.push(`  Wins: ${totalBattleWins.toLocaleString()} (${winRate}%)`);
+    lines.push(`  Losses: ${totalBattleLosses.toLocaleString()} (${(100 - parseFloat(winRate)).toFixed(1)}%)`);
+
+    const avgWave = results.reduce((sum, r) => sum + r.finalState.battleWave, 0) / results.length;
+    const maxWave = Math.max(...results.map(r => r.finalState.battleWave));
+    const avgStreak = results.reduce((sum, r) => sum + r.finalState.battleStreak, 0) / results.length;
+    const botsWithStreak = results.filter(r => r.finalState.battleStreak > 0).length;
+
+    lines.push(`Average final wave: ${avgWave.toFixed(1)}`);
+    lines.push(`Highest wave reached: ${maxWave}`);
+    lines.push(`Bots with active streak: ${botsWithStreak}/${results.length}`);
+    lines.push(`Average streak at end: ${avgStreak.toFixed(1)}`);
+    lines.push("");
+  }
 
   // Conclusion
   lines.push("=".repeat(60));

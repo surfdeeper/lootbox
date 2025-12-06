@@ -192,7 +192,9 @@ export interface GameSave {
 
   eggs?: { rarity: string; id: string }[];
 
-  pets?: { id: string; name: string; type: string; rarity: string }[];
+  pets?: { id: string; name: string; type: string; rarity: string; bonus?: number; count?: number }[];
+
+  equippedPets?: string[]; // IDs of pets equipped in the 6 slots
 
   dropsHistory?: LootItem[];
 

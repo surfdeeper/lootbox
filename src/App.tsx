@@ -65,6 +65,23 @@ function calculateOfflineEarnings(lastSaved: number, coinGeneratorLevel: number)
   return cappedSeconds * coinsPerSecond;
 }
 
+// Format large numbers with K, M, B suffixes
+function formatNumber(num: number): string {
+  if (num < 1000) return num.toFixed(2);
+  if (num < 1000000) return (num / 1000).toFixed(1) + 'K';
+  if (num < 1000000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num < 1000000000000) return (num / 1000000000).toFixed(1) + 'B';
+  return (num / 1000000000000).toFixed(1) + 'T';
+}
+
+// Get prestige cost based on current prestige count
+function getPrestigeCost(prestigeCount: number): number {
+  const costs = [8, 20, 50, 100];
+  if (prestigeCount < costs.length) return costs[prestigeCount];
+  // After first 4: 200, 400, 800, etc. (doubling)
+  return 200 * Math.pow(2, prestigeCount - costs.length);
+}
+
 function ItemIcon({ category, color, size = 32 }: { category: ItemCategory; color: string; size?: number }) {
   const path = CATEGORY_ICONS[category];
   return (
@@ -639,6 +656,7 @@ function PetsMenu({
   pets,
   equippedPets,
   onHatchEgg,
+  onHatchAll,
   onEquipPet,
   onUnequipPet
 }: {
@@ -647,6 +665,7 @@ function PetsMenu({
   pets: Pet[];
   equippedPets: string[];
   onHatchEgg: (eggId: string) => void;
+  onHatchAll: () => void;
   onEquipPet: (petId: string) => void;
   onUnequipPet: (petId: string) => void;
 }) {
@@ -811,6 +830,11 @@ function PetsMenu({
             <span className="coming-soon-text">Coming Soon...</span>
           </div>
         </div>
+        {eggs.length > 0 && (
+          <button className="hatch-all-btn" onClick={onHatchAll}>
+            🥚 Hatch All ({eggs.length})
+          </button>
+        )}
       </div>
     );
   };
@@ -978,7 +1002,7 @@ function BattleMenu({
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [battleResults, setBattleResults] = useState<{ playerPower: number; enemyPower: number; won: boolean }[] | null>(null);
   const [battleWon, setBattleWon] = useState<boolean | null>(null);
-  const [autoBattleResults, setAutoBattleResults] = useState<{ wins: number; losses: number; totalCoins: number } | null>(null);
+  const [autoBattleResults, setAutoBattleResults] = useState<{ wins: number; losses: number; totalCoins: number; isMax?: boolean } | null>(null);
 
   // Filter inventory to only show weapons, armor, and shields, sorted by power (best first, shields at end)
   const weaponCategories = [ItemCategory.Pistol, ItemCategory.Rifle, ItemCategory.SMG, ItemCategory.Shotgun, ItemCategory.Sniper, ItemCategory.Heavy, ItemCategory.Armor, ItemCategory.Shield];
@@ -1060,7 +1084,27 @@ function BattleMenu({
       }
     }
 
-    setAutoBattleResults({ wins, losses, totalCoins });
+    setAutoBattleResults({ wins, losses, totalCoins, isMax: false });
+  };
+
+  const handleMaxBattle = () => {
+    let wins = 0;
+    let totalCoins = 0;
+
+    // Battle until we lose
+    while (true) {
+      const { won, coinsEarned } = onBattle();
+      if (won) {
+        wins++;
+        totalCoins += coinsEarned || 0;
+      } else {
+        break; // Stop on first loss
+      }
+      // Safety limit to prevent infinite loops
+      if (wins >= 1000) break;
+    }
+
+    setAutoBattleResults({ wins, losses: 1, totalCoins, isMax: true });
   };
 
   const handleCloseAutoBattleResults = () => {
@@ -1207,6 +1251,13 @@ function BattleMenu({
             >
               ⚔️ Auto x10
             </button>
+            <button
+              className={`battle-max-btn ${!canBattle ? 'disabled' : ''}`}
+              onClick={handleMaxBattle}
+              disabled={!canBattle}
+            >
+              ⚔️ Max Battle
+            </button>
           </div>
         </div>
       </div>
@@ -1244,11 +1295,20 @@ function BattleMenu({
       {autoBattleResults && (
         <div className="battle-results-overlay" onClick={handleCloseAutoBattleResults}>
           <div className="battle-results-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>⚔️ Auto Battle Complete!</h2>
+            <h2>{autoBattleResults.isMax ? '⚔️ Max Battle Complete!' : '⚔️ Auto Battle Complete!'}</h2>
             <div className="auto-battle-summary">
-              <p>Wins: {autoBattleResults.wins}/10</p>
-              <p>Losses: {autoBattleResults.losses}/10</p>
-              <p>Total Coins: +{autoBattleResults.totalCoins.toFixed(1)}</p>
+              {autoBattleResults.isMax ? (
+                <>
+                  <p className="max-battle-wins">🏆 {autoBattleResults.wins} Consecutive Wins!</p>
+                  <p>Total Coins: +{autoBattleResults.totalCoins.toFixed(1)}</p>
+                </>
+              ) : (
+                <>
+                  <p>Wins: {autoBattleResults.wins}/10</p>
+                  <p>Losses: {autoBattleResults.losses}/10</p>
+                  <p>Total Coins: +{autoBattleResults.totalCoins.toFixed(1)}</p>
+                </>
+              )}
             </div>
             <button className="battle-results-close-btn" onClick={handleCloseAutoBattleResults}>
               Continue
@@ -1416,6 +1476,7 @@ function Inventory({
   onClose,
   onSellItem,
   onBulkSell,
+  onMergeItems,
   hasAutoSell,
   autoSellRarities,
   onToggleAutoSellRarity,
@@ -1424,6 +1485,7 @@ function Inventory({
   onClose: () => void;
   onSellItem: (itemId: string) => void;
   onBulkSell: (itemIds: string[]) => number;
+  onMergeItems: (itemIds: string[]) => LootItem | null;
   hasAutoSell: boolean;
   autoSellRarities: Set<Rarity>;
   onToggleAutoSellRarity: (rarity: Rarity) => void;
@@ -1439,6 +1501,9 @@ function Inventory({
   const [showBulkSellConfirm, setShowBulkSellConfirm] = useState(false);
   const [showSellAllModal, setShowSellAllModal] = useState(false);
   const [sellAllRarities, setSellAllRarities] = useState<Set<Rarity>>(new Set());
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
+  const [mergeResult, setMergeResult] = useState<LootItem | null>(null);
 
   const rarityOrder: Rarity[] = [
     Rarity.Legendary,
@@ -1478,7 +1543,22 @@ function Inventory({
   }, {} as Record<Rarity, number>) : {} as Record<Rarity, number>;
 
   const handleItemClick = (item: LootItem) => {
-    if (bulkSellMode) {
+    if (mergeMode) {
+      // In merge mode, can only select 3 items of same rarity (non-legendary)
+      if (item.rarity === Rarity.Legendary) return; // Can't merge legendaries
+
+      const newSet = new Set(selectedForMerge);
+      if (newSet.has(item.id)) {
+        newSet.delete(item.id);
+      } else if (newSet.size < 3) {
+        // Check if same rarity as already selected items
+        const selectedItems = items.filter(i => newSet.has(i.id));
+        if (selectedItems.length === 0 || selectedItems[0].rarity === item.rarity) {
+          newSet.add(item.id);
+        }
+      }
+      setSelectedForMerge(newSet);
+    } else if (bulkSellMode) {
       const newSet = new Set(selectedForSell);
       if (newSet.has(item.id)) {
         newSet.delete(item.id);
@@ -1495,6 +1575,30 @@ function Inventory({
     } else {
       setSelectedItem(item);
     }
+  };
+
+  const handleMerge = () => {
+    if (selectedForMerge.size === 3) {
+      const result = onMergeItems(Array.from(selectedForMerge));
+      if (result) {
+        setMergeResult(result);
+        setSelectedForMerge(new Set());
+      }
+    }
+  };
+
+  const canMerge = () => {
+    if (selectedForMerge.size !== 3) return false;
+    const selectedItems = items.filter(i => selectedForMerge.has(i.id));
+    if (selectedItems.length !== 3) return false;
+    const rarity = selectedItems[0].rarity;
+    return selectedItems.every(i => i.rarity === rarity) && rarity !== Rarity.Legendary;
+  };
+
+  const getNextRarity = (rarity: Rarity): Rarity | null => {
+    const order = [Rarity.Common, Rarity.Uncommon, Rarity.Rare, Rarity.Epic, Rarity.Legendary];
+    const idx = order.indexOf(rarity);
+    return idx < order.length - 1 ? order[idx + 1] : null;
   };
 
   const handleBulkSellClick = () => {
@@ -1585,9 +1689,25 @@ function Inventory({
                 setBulkSellMode(false);
                 setSelectedForSell(new Set());
                 setShowAutoSellSettings(false);
+                setMergeMode(false);
+                setSelectedForMerge(new Set());
               }}
             >
               {compareMode ? '✓ Compare Mode' : '⚖️ Compare'}
+            </button>
+            <button
+              className={`merge-mode-btn ${mergeMode ? 'active' : ''}`}
+              onClick={() => {
+                setMergeMode(!mergeMode);
+                setSelectedForMerge(new Set());
+                setCompareMode(false);
+                setSelectedForCompare([]);
+                setBulkSellMode(false);
+                setSelectedForSell(new Set());
+                setShowAutoSellSettings(false);
+              }}
+            >
+              {mergeMode ? '✓ Merge Mode' : '🔀 Merge'}
             </button>
             <button className="close-btn" onClick={onClose}>
               ✕
@@ -1662,6 +1782,29 @@ function Inventory({
           </div>
         )}
 
+        {mergeMode && (
+          <div className="merge-info">
+            <span>
+              Select 3 items of same rarity to merge into 1 higher rarity item
+              {selectedForMerge.size > 0 && (
+                <>
+                  {' '}| Selected: {selectedForMerge.size}/3
+                  {selectedForMerge.size === 3 && (() => {
+                    const selectedItems = items.filter(i => selectedForMerge.has(i.id));
+                    const nextRarity = getNextRarity(selectedItems[0]?.rarity);
+                    return nextRarity ? ` → 1 ${nextRarity}` : '';
+                  })()}
+                </>
+              )}
+            </span>
+            {canMerge() && (
+              <button className="confirm-merge-btn" onClick={handleMerge}>
+                Merge Items
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="inventory-list">
           {filteredItems.length === 0 ? (
             <p className="empty-inventory">
@@ -1673,8 +1816,10 @@ function Inventory({
             filteredItems.map((item) => {
               const isSelectedCompare = selectedForCompare.find(i => i.id === item.id);
               const isSelectedSell = selectedForSell.has(item.id);
+              const isSelectedMerge = selectedForMerge.has(item.id);
+              const isMergeDisabled = mergeMode && item.rarity === Rarity.Legendary;
               return (
-                <div key={item.id} className={`inventory-item-wrapper ${isSelectedCompare ? 'selected-for-compare' : ''} ${isSelectedSell ? 'selected-for-sell' : ''}`}>
+                <div key={item.id} className={`inventory-item-wrapper ${isSelectedCompare ? 'selected-for-compare' : ''} ${isSelectedSell ? 'selected-for-sell' : ''} ${isSelectedMerge ? 'selected-for-merge' : ''} ${isMergeDisabled ? 'merge-disabled' : ''}`}>
                   <LootItemCard
                     item={item}
                     compact
@@ -1770,11 +1915,24 @@ function Inventory({
           </div>
         </div>
       )}
+
+      {mergeResult && (
+        <div className="merge-result-overlay" onClick={() => setMergeResult(null)}>
+          <div className="merge-result-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Merge Successful!</h3>
+            <p>You created:</p>
+            <LootItemCard item={mergeResult} />
+            <button className="merge-result-close-btn" onClick={() => setMergeResult(null)}>
+              Awesome!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, onExportSave, onImportSave, rebirthCount, stats, totalDogBonus, totalCatBonus }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; onExportSave: () => void; onImportSave: (data: string) => boolean; rebirthCount: number; stats: { totalChestsOpened: number; totalCoinsEarned: number; legendariesFound: number }; totalDogBonus: number; totalCatBonus: number }) {
+function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, onExportSave, onImportSave, rebirthCount, stats, totalDogBonus, totalCatBonus, prestigeCount }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; onExportSave: () => void; onImportSave: (data: string) => boolean; rebirthCount: number; stats: { totalChestsOpened: number; totalCoinsEarned: number; legendariesFound: number }; totalDogBonus: number; totalCatBonus: number; prestigeCount: number }) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
   const [activeSettingsTab, setActiveSettingsTab] = useState<string | null>(null);
@@ -1920,13 +2078,16 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
         />
       </div>
       <div className="coins-display">
-        <span className="coins-text">💰 {coins.toFixed(2)} Coins</span>
+        <span className="coins-text">💰 {formatNumber(coins)} Coins</span>
         {coinsPerSecond > 0 && (
-          <span className="coin-rate">+{coinsPerSecond.toFixed(2)}/s</span>
+          <span className="coin-rate">+{formatNumber(coinsPerSecond)}/s</span>
         )}
       </div>
-      {(rebirthCount > 0 || totalDogBonus > 0 || totalCatBonus > 0) && (
+      {(rebirthCount > 0 || prestigeCount > 0 || totalDogBonus > 0 || totalCatBonus > 0) && (
         <div className="bonuses-display">
+          {prestigeCount > 0 && (
+            <span className="prestige-bonus-text">+{prestigeCount * 100}% Prestige</span>
+          )}
           {rebirthCount > 0 && (
             <span className="rebirth-bonus-text">+{rebirthCount * 10}% Rebirth</span>
           )}
@@ -1940,6 +2101,9 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
       )}
       <div className="rebirth-tokens-display">
         <span className="rebirth-tokens-text">🔄 {rebirthTokens} Rebirth Tokens</span>
+        {prestigeCount > 0 && (
+          <span className="prestige-count-text">⭐ {prestigeCount} Prestige</span>
+        )}
       </div>
       <h1 className="title">Lootbox</h1>
     </div>
@@ -1976,6 +2140,8 @@ export default function App() {
   const [autoSellRarities, setAutoSellRarities] = useState<Set<Rarity>>(new Set());
   const [rebirthTokens, setRebirthTokens] = useState(0);
   const [rebirthCount, setRebirthCount] = useState(0);
+  const [prestigeCount, setPrestigeCount] = useState(0);
+  const [currentArea, setCurrentArea] = useState(1);
   const [hasPets, setHasPets] = useState(false);
   const [showPets, setShowPets] = useState(false);
   const [eggUpgrades, setEggUpgrades] = useState<EggUpgrades>({
@@ -2000,7 +2166,21 @@ export default function App() {
   const [battleWave, setBattleWave] = useState(1);
   const [battleSlots, setBattleSlots] = useState<(string | null)[]>([null, null, null, null, null]);
   const [battleStreak, setBattleStreak] = useState(0);
+  const battleStreakRef = useRef(0); // Real-time streak tracking for rapid battles
   const [lastBattleDrop, setLastBattleDrop] = useState<LootItem | null>(null);
+  const [criticalHit, setCriticalHit] = useState(false);
+  const [bonusEventActive, setBonusEventActive] = useState(false);
+  const [bonusEventEndTime, setBonusEventEndTime] = useState<number | null>(null);
+  const [dailyChallenges, setDailyChallenges] = useState<{
+    id: string;
+    description: string;
+    target: number;
+    progress: number;
+    reward: number;
+    completed: boolean;
+  }[]>([]);
+  const [lastChallengeReset, setLastChallengeReset] = useState<number>(0);
+  const [showChallenges, setShowChallenges] = useState(false);
   const initialLoadRef = useRef(false);
   const loadedLevelRef = useRef<number | null>(null);
   const saveEnabledRef = useRef(false);
@@ -2049,6 +2229,8 @@ export default function App() {
       setDropsHistory((save.dropsHistory || []).map(d => ({ ...d, rarity: d.rarity as Rarity, category: d.category as ItemCategory })));
       setRebirthTokens(save.rebirth?.tokens || 0);
       setRebirthCount(save.rebirth?.count || 0);
+      setPrestigeCount(save.prestige?.count || 0);
+      setCurrentArea(save.area || 1);
       setBattleWave(save.battle?.wave || 1);
       setBattleSlots(save.battle?.slots || [null, null, null, null, null]);
 
@@ -2102,6 +2284,10 @@ export default function App() {
         tokens: rebirthTokens,
         count: rebirthCount,
       },
+      prestige: {
+        count: prestigeCount,
+      },
+      area: currentArea,
       eggs,
       pets,
       equippedPets,
@@ -2114,7 +2300,7 @@ export default function App() {
       },
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
 
   // Show level-up notification - only when level actually increases from gameplay
   const prevLevelRef = useRef<number>(level);
@@ -2136,20 +2322,89 @@ export default function App() {
       .reduce((sum, pet) => sum + (pet.bonus || 0), 0);
   }, [pets, equippedPets]);
 
+  // Calculate coin multiplier (used for selling, battles, and idle generation)
+  const coinMultiplier = useMemo(() => {
+    const rebirthBonus = rebirthCount * 0.10; // 10% per rebirth
+    const prestigeBonus = prestigeCount * 1.0; // 100% per prestige (permanent)
+    const dogBonus = totalDogBonus / 100; // Convert percentage to multiplier
+    const bonusEventMultiplier = bonusEventActive ? 1.0 : 0; // 2x during bonus events
+    return 1 + rebirthBonus + prestigeBonus + dogBonus + bonusEventMultiplier;
+  }, [rebirthCount, prestigeCount, totalDogBonus, bonusEventActive]);
+
+  // Generate daily challenges
+  const generateDailyChallenges = useCallback(() => {
+    const challengeTemplates = [
+      { id: 'open_chests', description: 'Open 50 chests', target: 50, reward: 100 },
+      { id: 'sell_items', description: 'Sell 20 items', target: 20, reward: 50 },
+      { id: 'win_battles', description: 'Win 5 battles', target: 5, reward: 150 },
+      { id: 'find_rares', description: 'Find 10 rare+ items', target: 10, reward: 75 },
+      { id: 'earn_coins', description: 'Earn 500 coins', target: 500, reward: 200 },
+    ];
+    // Pick 3 random challenges
+    const shuffled = [...challengeTemplates].sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, 3);
+    return selected.map(c => ({ ...c, progress: 0, completed: false }));
+  }, []);
+
+  // Check and reset daily challenges
+  useEffect(() => {
+    const now = Date.now();
+    const today = new Date(now).toDateString();
+    const lastReset = new Date(lastChallengeReset).toDateString();
+
+    if (today !== lastReset && isLoaded) {
+      setDailyChallenges(generateDailyChallenges());
+      setLastChallengeReset(now);
+    }
+  }, [isLoaded, lastChallengeReset, generateDailyChallenges]);
+
+  // Bonus event timer
+  useEffect(() => {
+    if (!bonusEventEndTime) return;
+
+    const checkEvent = setInterval(() => {
+      if (Date.now() >= bonusEventEndTime) {
+        setBonusEventActive(false);
+        setBonusEventEndTime(null);
+      }
+    }, 1000);
+
+    return () => clearInterval(checkEvent);
+  }, [bonusEventEndTime]);
+
+  // Start bonus event (5 minutes of 2x rewards)
+  const startBonusEvent = useCallback(() => {
+    if (bonusEventActive) return;
+    setBonusEventActive(true);
+    setBonusEventEndTime(Date.now() + 5 * 60 * 1000); // 5 minutes
+  }, [bonusEventActive]);
+
+  // Update challenge progress
+  const updateChallengeProgress = useCallback((challengeId: string, amount: number = 1) => {
+    setDailyChallenges(prev => prev.map(c => {
+      if (c.id !== challengeId || c.completed) return c;
+      const newProgress = c.progress + amount;
+      const completed = newProgress >= c.target;
+      if (completed && !c.completed) {
+        // Award coins when challenge completes
+        setCoins(coins => coins + c.reward);
+      }
+      return { ...c, progress: Math.min(newProgress, c.target), completed };
+    }));
+  }, []);
+
   // Idle coin generation
   useEffect(() => {
     if (coinGeneratorLevel <= 0) return;
 
     const interval = setInterval(() => {
       const baseCoinsPerSecond = coinGeneratorLevel * 0.01;
-      const rebirthBonus = rebirthCount * 0.10; // 10% per rebirth
-      const dogBonus = totalDogBonus / 100; // Convert percentage to multiplier
-      const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus + dogBonus);
+      const coinsPerSecond = baseCoinsPerSecond * coinMultiplier;
       setCoins((prev) => prev + coinsPerSecond / 10); // Divide by 10 since we run 10 times per second
     }, 100);
 
     return () => clearInterval(interval);
-  }, [coinGeneratorLevel, rebirthCount, totalDogBonus]);
+  }, [coinGeneratorLevel, coinMultiplier]);
 
   // Auto-open chests with progress tracking
   useEffect(() => {
@@ -2229,7 +2484,7 @@ export default function App() {
     return weights;
   }, [luckUpgrades, purchasedBoxes, totalCatBonus]);
 
-  const openChest = () => {
+  const openChest = (isManual: boolean = false) => {
     if (isOpening) return;
 
     setIsOpening(true);
@@ -2238,6 +2493,18 @@ export default function App() {
 
     setTimeout(() => {
       setChestState("open");
+
+      // Critical hit chance on manual opens (15% chance)
+      const isCritical = isManual && Math.random() < 0.15;
+      if (isCritical) {
+        setCriticalHit(true);
+        setTimeout(() => setCriticalHit(false), 2000);
+        // 10% chance to trigger a 5-minute 2x bonus event on critical
+        if (Math.random() < 0.10 && !bonusEventActive) {
+          startBonusEvent();
+        }
+      }
+
       const customWeights = getBoxRarityWeights();
       const newLoot = generateLoot(undefined, customWeights);
       setLoot(newLoot);
@@ -2255,16 +2522,17 @@ export default function App() {
       // Play sound effect based on rarity
       playChestOpenSound(newLoot.rarity);
 
-      // Award XP based on rarity
-      const { xp: newXp, level: newLevel, coinReward: levelUpCoins } = addXp(xp, level, XP_REWARDS[newLoot.rarity]);
+      // Award XP based on rarity (2x on critical)
+      const xpMultiplier = isCritical ? 2 : 1;
+      const { xp: newXp, level: newLevel, coinReward: levelUpCoins } = addXp(xp, level, XP_REWARDS[newLoot.rarity] * xpMultiplier);
       setXp(newXp);
       setLevel(newLevel);
 
-      // Award coins based on rarity + level up bonus + rebirth bonus
+      // Award coins based on rarity + level up bonus + all multipliers (2x on critical)
       const autoSellBonus = shouldAutoSell ? SELL_PRICES[newLoot.rarity] : 0;
       const baseCoins = COIN_REWARDS[newLoot.rarity] + levelUpCoins + autoSellBonus;
-      const rebirthBonus = rebirthCount * 0.10; // 10% per rebirth
-      const earnedCoins = baseCoins * (1 + rebirthBonus);
+      const criticalMultiplier = isCritical ? 2 : 1;
+      const earnedCoins = baseCoins * coinMultiplier * criticalMultiplier;
       setCoins((prev) => prev + earnedCoins);
 
       // Update stats
@@ -2273,6 +2541,16 @@ export default function App() {
         totalCoinsEarned: prev.totalCoinsEarned + earnedCoins,
         legendariesFound: prev.legendariesFound + (newLoot.rarity === Rarity.Legendary ? 1 : 0),
       }));
+
+      // Update daily challenge progress
+      updateChallengeProgress('open_chests', 1);
+      updateChallengeProgress('earn_coins', earnedCoins);
+      if ([Rarity.Rare, Rarity.Epic, Rarity.Legendary].includes(newLoot.rarity)) {
+        updateChallengeProgress('find_rares', 1);
+      }
+      if (shouldAutoSell) {
+        updateChallengeProgress('sell_items', 1);
+      }
 
       // Check for egg drops based on egg upgrades
       // Each upgrade gives a 10% chance to get an egg of that rarity
@@ -2301,7 +2579,7 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && !showInventory && !showShop && !showSettings && !showBattle) {
         e.preventDefault();
-        openChest();
+        openChest(true); // Manual open - eligible for critical hit
       }
       if (e.code === "Escape") {
         if (showInventory) setShowInventory(false);
@@ -2319,18 +2597,54 @@ export default function App() {
     const item = inventory.find(i => i.id === itemId);
     if (!item) return;
 
-    setCoins(prev => prev + SELL_PRICES[item.rarity]);
+    const sellValue = SELL_PRICES[item.rarity] * coinMultiplier;
+    setCoins(prev => prev + sellValue);
     setInventory(prev => prev.filter(i => i.id !== itemId));
-  }, [inventory]);
+    updateChallengeProgress('sell_items', 1);
+    updateChallengeProgress('earn_coins', sellValue);
+  }, [inventory, coinMultiplier, updateChallengeProgress]);
 
   const handleBulkSell = useCallback((itemIds: string[]) => {
     const itemsToSell = inventory.filter(i => itemIds.includes(i.id));
-    const totalValue = itemsToSell.reduce((total, item) => total + SELL_PRICES[item.rarity], 0);
+    const baseValue = itemsToSell.reduce((total, item) => total + SELL_PRICES[item.rarity], 0);
+    const totalValue = baseValue * coinMultiplier;
 
     setCoins(prev => prev + totalValue);
     setInventory(prev => prev.filter(i => !itemIds.includes(i.id)));
+    updateChallengeProgress('sell_items', itemsToSell.length);
+    updateChallengeProgress('earn_coins', totalValue);
 
     return totalValue;
+  }, [inventory, coinMultiplier, updateChallengeProgress]);
+
+  // Merge 3 items of same rarity to get 1 of next rarity
+  const handleMergeItems = useCallback((itemIds: string[]): LootItem | null => {
+    if (itemIds.length !== 3) return null;
+
+    const itemsToMerge = inventory.filter(i => itemIds.includes(i.id));
+    if (itemsToMerge.length !== 3) return null;
+
+    // All items must be same rarity
+    const rarity = itemsToMerge[0].rarity;
+    if (!itemsToMerge.every(i => i.rarity === rarity)) return null;
+
+    // Can't merge legendaries (already max)
+    if (rarity === Rarity.Legendary) return null;
+
+    // Get next rarity
+    const rarityOrder = [Rarity.Common, Rarity.Uncommon, Rarity.Rare, Rarity.Epic, Rarity.Legendary];
+    const currentIndex = rarityOrder.indexOf(rarity);
+    const nextRarity = rarityOrder[currentIndex + 1];
+
+    // Generate new item of next rarity
+    const newItem = generateLootWithGuaranteedRarity(nextRarity);
+    if (!newItem) return null;
+
+    // Remove merged items and add new one
+    setInventory(prev => [...prev.filter(i => !itemIds.includes(i.id)), newItem]);
+    setDropsHistory(prev => [newItem, ...prev].slice(0, 1000));
+
+    return newItem;
   }, [inventory]);
 
   const playChestOpenSound = (rarity: Rarity) => {
@@ -2401,6 +2715,10 @@ export default function App() {
         tokens: rebirthTokens,
         count: rebirthCount,
       },
+      prestige: {
+        count: prestigeCount,
+      },
+      area: currentArea,
       eggs,
       pets,
       equippedPets,
@@ -2413,7 +2731,7 @@ export default function App() {
       },
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
 
   const exportSave = useCallback(() => {
     const save: GameSave = {
@@ -2436,6 +2754,10 @@ export default function App() {
         tokens: rebirthTokens,
         count: rebirthCount,
       },
+      prestige: {
+        count: prestigeCount,
+      },
+      area: currentArea,
       eggs,
       pets,
       equippedPets,
@@ -2456,7 +2778,7 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots]);
 
   const importSave = useCallback((data: string): boolean => {
     try {
@@ -2496,6 +2818,8 @@ export default function App() {
       setDropsHistory((save.dropsHistory || []).map(d => ({ ...d, rarity: d.rarity as Rarity, category: d.category as ItemCategory })));
       setRebirthTokens(save.rebirth?.tokens || 0);
       setRebirthCount(save.rebirth?.count || 0);
+      setPrestigeCount(save.prestige?.count || 0);
+      setCurrentArea(save.area || 1);
       setBattleWave(save.battle?.wave || 1);
       setBattleSlots(save.battle?.slots || [null, null, null, null, null]);
       setBattleStreak(0);
@@ -2549,6 +2873,57 @@ export default function App() {
     });
   }, [eggs]);
 
+  const handleHatchAll = useCallback(() => {
+    if (eggs.length === 0) return;
+
+    // Process all eggs
+    const newPetsMap = new Map<string, Pet>(); // key: "type-rarity"
+
+    eggs.forEach(egg => {
+      const petType: "dog" | "cat" = Math.random() < 0.5 ? "dog" : "cat";
+      const petName = petType === "dog" ? "Dog" : "Cat";
+      const bonus = generatePetBonus(petType, egg.rarity);
+      const key = `${petType}-${egg.rarity}`;
+
+      if (newPetsMap.has(key)) {
+        const existing = newPetsMap.get(key)!;
+        existing.bonus += bonus;
+        existing.count += 1;
+      } else {
+        newPetsMap.set(key, {
+          id: crypto.randomUUID(),
+          name: petName,
+          type: petType,
+          rarity: egg.rarity,
+          bonus,
+          count: 1,
+        });
+      }
+    });
+
+    // Clear all eggs
+    setEggs([]);
+
+    // Merge new pets with existing pets
+    setPets(prev => {
+      const updated = [...prev];
+      newPetsMap.forEach((newPet, key) => {
+        const [type, rarity] = key.split('-') as ["dog" | "cat", Rarity];
+        const existingIndex = updated.findIndex(p => p.type === type && p.rarity === rarity);
+        if (existingIndex !== -1) {
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            bonus: updated[existingIndex].bonus + newPet.bonus,
+            count: updated[existingIndex].count + newPet.count,
+          };
+        } else {
+          updated.push(newPet);
+        }
+      });
+      return updated;
+    });
+  }, [eggs]);
+
   const getRebirthCost = useCallback(() => {
     return Math.floor(200 * Math.pow(1.25, rebirthCount));
   }, [rebirthCount]);
@@ -2577,6 +2952,43 @@ export default function App() {
       setRebirthCount(prev => prev + 1);
     }
   }, [coins, getRebirthCost]);
+
+  const handlePrestige = useCallback(() => {
+    const cost = getPrestigeCost(prestigeCount);
+    if (rebirthTokens >= cost) {
+      // Reset rebirths and all upgrades
+      setRebirthTokens(0);
+      setRebirthCount(0);
+      setCoins(0);
+      setXp(0);
+      setLevel(1);
+      setInventory([]);
+      setCoinGeneratorLevel(0);
+      setLuckUpgrades({ luckUpgrade1: 0, luckUpgrade2: 0, luckUpgrade3: 0 });
+      setHasAutoOpen(false);
+      setHasAutoSell(false);
+      setAutoSellRarities(new Set());
+      setPurchasedBoxes([]);
+      setDropsHistory([]);
+      setEggUpgrades({ common: false, uncommon: false, rare: false, epic: false, legendary: false });
+      setBattleWave(1);
+      setBattleSlots([null, null, null, null, null]);
+      // Keep pets but reset equipped
+      setEquippedPets([]);
+      // Award prestige
+      setPrestigeCount(prev => prev + 1);
+    }
+  }, [rebirthTokens, prestigeCount]);
+
+  const handleNextArea = useCallback(() => {
+    if (prestigeCount >= 2) {
+      setCurrentArea(2);
+    }
+  }, [prestigeCount]);
+
+  const handleBackArea = useCallback(() => {
+    setCurrentArea(1);
+  }, []);
 
   const handleBattle = useCallback(() => {
     const results: { playerPower: number; enemyPower: number; won: boolean; isArmor?: boolean }[] = [];
@@ -2644,17 +3056,38 @@ export default function App() {
       }
 
       // Streak bonus: +10% per consecutive win (max 100% at 10 streak)
-      const newStreak = battleStreak + 1;
+      // Use ref for real-time tracking during rapid battles
+      const newStreak = battleStreakRef.current + 1;
+      battleStreakRef.current = newStreak;
       const streakBonus = Math.min(newStreak * 0.10, 1.0);
 
-      // Rebirth bonus
-      const rebirthBonus = rebirthCount * 0.10;
-
-      // Calculate total coins
-      const earnedCoins = baseCoins * (1 + rebirthBonus) * (1 + streakBonus);
+      // Calculate total coins (coinMultiplier includes rebirth + dog pet bonuses)
+      const earnedCoins = baseCoins * coinMultiplier * (1 + streakBonus);
       setCoins(prev => prev + earnedCoins);
       setBattleWave(prev => prev + 1);
       setBattleStreak(newStreak);
+
+      // Update daily challenges
+      updateChallengeProgress('win_battles', 1);
+      updateChallengeProgress('earn_coins', earnedCoins);
+
+      // Streak milestone rewards: bonus item at 5, 10, 15, etc.
+      if (newStreak > 0 && newStreak % 5 === 0) {
+        // Better rarity for higher streaks
+        let streakDropRarity: Rarity;
+        if (newStreak >= 15) {
+          streakDropRarity = Rarity.Legendary;
+        } else if (newStreak >= 10) {
+          streakDropRarity = Rarity.Epic;
+        } else {
+          streakDropRarity = Rarity.Rare;
+        }
+        const streakDrop = generateLootWithGuaranteedRarity(streakDropRarity);
+        if (streakDrop) {
+          setInventory(prev => [...prev, streakDrop]);
+          setDropsHistory(prev => [streakDrop, ...prev].slice(0, 1000));
+        }
+      }
 
       // Chance to drop a guaranteed rare+ item (20% base, +2% per wave, max 50%)
       const dropChance = Math.min(0.20 + (battleWave * 0.02), 0.50);
@@ -2683,11 +3116,12 @@ export default function App() {
       return { won, results, streak: newStreak, coinsEarned: earnedCoins };
     } else {
       // Lost - reset streak
+      battleStreakRef.current = 0;
       setBattleStreak(0);
     }
 
     return { won, results, streak: 0 };
-  }, [battleSlots, inventory, battleWave, rebirthCount, battleStreak]);
+  }, [battleSlots, inventory, battleWave, coinMultiplier, updateChallengeProgress]);
 
   const getChestEmoji = () => {
     if (chestState === "open") return "📭";
@@ -2699,8 +3133,8 @@ export default function App() {
 
   const handleCodeSubmit = () => {
     if (codeValue === "1337") {
-      setCoins((prev) => prev + 1000);
-      setRebirthTokens((prev) => prev + 10);
+      setCoins((prev) => prev + 1000000000);
+      setPrestigeCount((prev) => prev + 5);
       setUsedCheatCode(true);
       setCodeValue("");
       setShowCodeInput(false);
@@ -2708,9 +3142,9 @@ export default function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${currentArea === 2 ? 'area-galaxy' : ''}`}>
       <div className="version-tracker">vs: 1.01</div>
-      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} onExportSave={exportSave} onImportSave={importSave} rebirthCount={rebirthCount} stats={stats} totalDogBonus={totalDogBonus} totalCatBonus={totalCatBonus} />
+      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} onExportSave={exportSave} onImportSave={importSave} rebirthCount={rebirthCount} stats={stats} totalDogBonus={totalDogBonus} totalCatBonus={totalCatBonus} prestigeCount={prestigeCount} />
 
       {hasAutoOpen && (
         <div className="auto-open-bar-container">
@@ -2724,15 +3158,47 @@ export default function App() {
         </div>
       )}
 
-      <button
-        className={`rebirth-btn ${coins >= getRebirthCost() ? '' : 'disabled'}`}
-        onClick={handleRebirth}
-        disabled={coins < getRebirthCost()}
-      >
-        <span className="rebirth-icon">🔄</span>
-        <span className="rebirth-text">Rebirth</span>
-        <span className="rebirth-cost">💰 {getRebirthCost()}</span>
-      </button>
+      {bonusEventActive && bonusEventEndTime && (
+        <div className="bonus-event-banner-small">
+          <span className="bonus-small-icon">🔥</span>
+          <span className="bonus-small-text">2x</span>
+          <span className="bonus-small-timer">
+            {Math.max(0, Math.ceil((bonusEventEndTime - Date.now()) / 1000))}s
+          </span>
+        </div>
+      )}
+
+      <div className="rebirth-prestige-container">
+        <button
+          className={`rebirth-btn ${coins >= getRebirthCost() ? '' : 'disabled'}`}
+          onClick={handleRebirth}
+          disabled={coins < getRebirthCost()}
+        >
+          <span className="rebirth-icon">🔄</span>
+          <span className="rebirth-text">Rebirth</span>
+          <span className="rebirth-cost">💰 {formatNumber(getRebirthCost())}</span>
+        </button>
+
+        <button
+          className={`prestige-btn ${rebirthTokens >= getPrestigeCost(prestigeCount) ? '' : 'disabled'}`}
+          onClick={handlePrestige}
+          disabled={rebirthTokens < getPrestigeCost(prestigeCount)}
+        >
+          <span className="prestige-icon">⭐</span>
+          <span className="prestige-text">Prestige</span>
+          <span className="prestige-cost">🔄 {getPrestigeCost(prestigeCount)}</span>
+        </button>
+      </div>
+
+      {dailyChallenges.length > 0 && (
+        <button className="challenges-btn" onClick={() => setShowChallenges(true)}>
+          <span className="challenges-btn-icon">📋</span>
+          <span className="challenges-btn-text">Challenges</span>
+          <span className="challenges-btn-progress">
+            {dailyChallenges.filter(c => c.completed).length}/{dailyChallenges.length}
+          </span>
+        </button>
+      )}
 
       <button className="battle-btn" onClick={() => setShowBattle(true)}>
         ⚔️ Battle
@@ -2754,6 +3220,15 @@ export default function App() {
         </div>
       )}
 
+      {criticalHit && (
+        <div className="critical-hit-notification">
+          <div className="critical-hit-content">
+            <span className="critical-hit-text">CRITICAL HIT!</span>
+            <span className="critical-hit-bonus">2x Rewards!</span>
+          </div>
+        </div>
+      )}
+
       <button className="drops-history-btn" onClick={() => setShowDropsHistory(true)}>
         📜 Drops ({dropsHistory.length})
       </button>
@@ -2762,11 +3237,28 @@ export default function App() {
         🛒 Shop
       </button>
 
+      {currentArea === 1 ? (
+        <button
+          className={`next-area-btn ${prestigeCount >= 2 ? '' : 'disabled'}`}
+          onClick={handleNextArea}
+          disabled={prestigeCount < 2}
+        >
+          <span className="next-area-icon">🌌</span>
+          <span className="next-area-text">Next Area</span>
+          {prestigeCount < 2 && <span className="next-area-cost">⭐ 2 Prestige</span>}
+        </button>
+      ) : (
+        <button className="back-area-btn" onClick={handleBackArea}>
+          <span className="back-area-icon">◀</span>
+          <span className="back-area-text">Back</span>
+        </button>
+      )}
+
       <button className="inventory-btn" onClick={() => setShowInventory(true)}>
         🎒 Inventory ({inventory.length})
       </button>
 
-      <div className="chest-container" onClick={openChest}>
+      <div className="chest-container" onClick={() => openChest(true)}>
         {recentEgg && (
           <div className={`egg-on-chest rarity-${recentEgg}`} style={{ color: RARITY_COLORS[recentEgg] }}>
             <span className="egg-on-chest-emoji">🥚</span>
@@ -2789,6 +3281,7 @@ export default function App() {
           onClose={() => setShowInventory(false)}
           onSellItem={handleSellItem}
           onBulkSell={handleBulkSell}
+          onMergeItems={handleMergeItems}
           hasAutoSell={hasAutoSell}
           autoSellRarities={autoSellRarities}
           onToggleAutoSellRarity={(rarity) => {
@@ -2889,6 +3382,7 @@ export default function App() {
           pets={pets}
           equippedPets={equippedPets}
           onHatchEgg={handleHatchEgg}
+          onHatchAll={handleHatchAll}
           onEquipPet={(petId) => {
             if (equippedPets.length < 6 && !equippedPets.includes(petId)) {
               setEquippedPets([...equippedPets, petId]);
@@ -2911,6 +3405,41 @@ export default function App() {
           rebirthCount={rebirthCount}
           onBattle={handleBattle}
         />
+      )}
+
+      {showChallenges && (
+        <div className="challenges-overlay" onClick={() => setShowChallenges(false)}>
+          <div className="challenges-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="challenges-modal-header">
+              <h2>📋 Daily Challenges</h2>
+              <button className="close-btn" onClick={() => setShowChallenges(false)}>✕</button>
+            </div>
+            <div className="challenges-modal-content">
+              {dailyChallenges.map(c => (
+                <div key={c.id} className={`challenge-modal-item ${c.completed ? 'completed' : ''}`}>
+                  <div className="challenge-modal-info">
+                    <span className="challenge-modal-desc">{c.description}</span>
+                    <div className="challenge-modal-progress-bar">
+                      <div
+                        className="challenge-modal-progress-fill"
+                        style={{ width: `${Math.min(100, (c.progress / c.target) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="challenge-modal-stats">
+                    <span className="challenge-modal-count">{c.progress}/{c.target}</span>
+                    <span className="challenge-modal-reward">
+                      {c.completed ? '✓' : `🪙 ${c.reward}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="challenges-modal-footer">
+              <p className="challenges-reset-info">Challenges reset daily</p>
+            </div>
+          </div>
+        </div>
       )}
 
       {showDropsHistory && (

@@ -190,6 +190,12 @@ export interface GameSave {
     count: number;
   };
 
+  prestige?: {
+    count: number; // Number of prestiges - each gives 100% permanent bonus
+  };
+
+  area?: number; // Current area (1 = default, 2 = galaxy, etc.)
+
   eggs?: { rarity: string; id: string }[];
 
   pets?: { id: string; name: string; type: string; rarity: string; bonus?: number; count?: number }[];

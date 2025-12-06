@@ -1101,6 +1101,7 @@ export interface BotTestConfig {
   actionsPerBot: number;
   verbose: boolean;
   seed?: number;
+  battleMode?: boolean;
 }
 
 export function runBotTest(config: BotTestConfig): TestResult[] {
@@ -1117,12 +1118,26 @@ export function runBotTest(config: BotTestConfig): TestResult[] {
     }
 
     for (let i = 0; i < config.actionsPerBot; i++) {
-      // Pick a random action, weighted toward opening chests
+      // Pick a random action with configurable weights
       let actionIndex: number;
-      if (Math.random() < 0.5) {
-        actionIndex = 0; // Open chest (50% of actions)
+      const roll = Math.random();
+
+      if (config.battleMode) {
+        // Battle mode: 40% battle, 30% open chest, 30% other
+        if (roll < 0.40) {
+          actionIndex = 15; // Battle action (Fight battle)
+        } else if (roll < 0.70) {
+          actionIndex = 0; // Open chest
+        } else {
+          actionIndex = Math.floor(Math.random() * botActions.length);
+        }
       } else {
-        actionIndex = Math.floor(Math.random() * botActions.length);
+        // Normal mode: 50% open chest, 50% random
+        if (roll < 0.5) {
+          actionIndex = 0; // Open chest
+        } else {
+          actionIndex = Math.floor(Math.random() * botActions.length);
+        }
       }
 
       const action = botActions[actionIndex];
@@ -1292,14 +1307,17 @@ if (typeof process !== "undefined" && process?.argv) {
   const numBots = parseInt(args[0]) || 5;
   const actionsPerBot = parseInt(args[1]) || 1000;
   const verbose = args.includes("--verbose") || args.includes("-v");
+  const battleMode = args.includes("--battle-mode");
 
-  console.log(`Running bot test with ${numBots} bots, ${actionsPerBot} actions each...`);
+  const modeLabel = battleMode ? " (battle mode: 40% battles)" : "";
+  console.log(`Running bot test with ${numBots} bots, ${actionsPerBot} actions each${modeLabel}...`);
   console.log("");
 
   const results = runBotTest({
     numBots,
     actionsPerBot,
     verbose,
+    battleMode,
   });
 
   console.log("");

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { generateLoot } from "./generator";
+import { generateLoot, generateLootWithGuaranteedRarity } from "./generator";
 import { LootItem, RARITY_EMOJIS, RARITY_COLORS, Rarity, CATEGORY_ICONS, ItemCategory, GameSave, SAVE_KEY, SAVE_VERSION, SELL_PRICES, XP_REWARDS, COIN_REWARDS } from "./types";
 
 // Reusable audio context for sound effects
@@ -846,6 +846,8 @@ function BattleMenu({
   battleSlots,
   onUpdateSlots,
   wave,
+  streak,
+  rebirthCount,
   onBattle,
 }: {
   onClose: () => void;
@@ -853,7 +855,9 @@ function BattleMenu({
   battleSlots: (string | null)[];
   onUpdateSlots: (slots: (string | null)[]) => void;
   wave: number;
-  onBattle: () => { won: boolean; results: { playerPower: number; enemyPower: number; won: boolean }[] };
+  streak: number;
+  rebirthCount: number;
+  onBattle: () => { won: boolean; results: { playerPower: number; enemyPower: number; won: boolean }[]; streak?: number; coinsEarned?: number };
 }) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [battleResults, setBattleResults] = useState<{ playerPower: number; enemyPower: number; won: boolean }[] | null>(null);
@@ -904,8 +908,24 @@ function BattleMenu({
       <div className="battle-modal" onClick={(e) => e.stopPropagation()}>
         <div className="battle-header">
           <h2>Battle ⚔️</h2>
-          <span className="battle-wave">Wave {wave}</span>
+          <div className="battle-info">
+            <span className="battle-wave">Wave {wave}</span>
+            {streak > 0 && <span className="battle-streak">Streak: {streak}</span>}
+          </div>
           <button className="battle-close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="battle-rewards-preview">
+          <span className="reward-label">Win Reward:</span>
+          <span className="reward-coins">
+            {(() => {
+              const baseCoins = 5 + wave;
+              const streakBonus = Math.min((streak + 1) * 0.10, 1.0);
+              const rebirthBonus = rebirthCount * 0.10;
+              const total = baseCoins * (1 + rebirthBonus) * (1 + streakBonus);
+              return `${total.toFixed(1)} coins`;
+            })()}
+          </span>
+          <span className="reward-drop">+ chance for rare+ drop</span>
         </div>
 
         <div className="battle-content">
@@ -1032,9 +1052,11 @@ function BattleMenu({
 function DropsHistory({
   drops,
   onClose,
+  onClear,
 }: {
   drops: LootItem[];
   onClose: () => void;
+  onClear: () => void;
 }) {
   const [filter, setFilter] = useState<RarityFilter>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
@@ -1084,9 +1106,16 @@ function DropsHistory({
       <div className="drops-history-modal" onClick={(e) => e.stopPropagation()}>
         <div className="drops-history-header">
           <h2>Drops History</h2>
-          <button className="drops-history-close-btn" onClick={onClose}>
-            ✕
-          </button>
+          <div className="drops-history-header-actions">
+            {drops.length > 0 && (
+              <button className="clear-history-btn" onClick={onClear}>
+                Clear All
+              </button>
+            )}
+            <button className="drops-history-close-btn" onClick={onClose}>
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="drops-history-filters">
@@ -1534,17 +1563,46 @@ function Inventory({
   );
 }
 
-function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, rebirthCount, stats }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; rebirthCount: number; stats: { totalChestsOpened: number; totalCoinsEarned: number; legendariesFound: number } }) {
+function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, onExportSave, onImportSave, rebirthCount, stats }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; onExportSave: () => void; onImportSave: (data: string) => boolean; rebirthCount: number; stats: { totalChestsOpened: number; totalCoinsEarned: number; legendariesFound: number } }) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
   const [activeSettingsTab, setActiveSettingsTab] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string>("");
   const coinsPerSecond = coinGeneratorLevel * 0.01;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleManualSave = () => {
     onManualSave();
     setSaveStatus("Saved!");
     setTimeout(() => setSaveStatus(""), 2000);
+  };
+
+  const handleExport = () => {
+    onExportSave();
+    setSaveStatus("Exported!");
+    setTimeout(() => setSaveStatus(""), 2000);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const data = event.target?.result as string;
+      if (data) {
+        const success = onImportSave(data);
+        setSaveStatus(success ? "Imported!" : "Import failed!");
+        setTimeout(() => setSaveStatus(""), 2000);
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be selected again
+    e.target.value = "";
   };
 
   return (
@@ -1580,6 +1638,27 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
             >
               💾
             </button>
+            <button
+              className="settings-tab-btn"
+              onClick={handleExport}
+              title="Export Save"
+            >
+              📤
+            </button>
+            <button
+              className="settings-tab-btn"
+              onClick={handleImportClick}
+              title="Import Save"
+            >
+              📥
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".json"
+              style={{ display: 'none' }}
+            />
           </div>
           {saveStatus && (
             <div className="save-status">{saveStatus}</div>
@@ -1697,6 +1776,8 @@ export default function App() {
   const [showBattle, setShowBattle] = useState(false);
   const [battleWave, setBattleWave] = useState(1);
   const [battleSlots, setBattleSlots] = useState<(string | null)[]>([null, null, null, null, null]);
+  const [battleStreak, setBattleStreak] = useState(0);
+  const [lastBattleDrop, setLastBattleDrop] = useState<LootItem | null>(null);
   const initialLoadRef = useRef(false);
   const loadedLevelRef = useRef<number | null>(null);
   const saveEnabledRef = useRef(false);
@@ -1912,7 +1993,7 @@ export default function App() {
       }
 
       // Add to drops history
-      setDropsHistory(prev => [newLoot, ...prev]);
+      setDropsHistory(prev => [newLoot, ...prev].slice(0, 1000));
 
       // Play sound effect based on rarity
       playChestOpenSound(newLoot.rarity);
@@ -2076,6 +2157,91 @@ export default function App() {
     saveGame(save);
   }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, dropsHistory, battleWave, battleSlots]);
 
+  const exportSave = useCallback(() => {
+    const save: GameSave = {
+      version: SAVE_VERSION,
+      lastSaved: Date.now(),
+      player: { level, xp, coins },
+      inventory,
+      upgrades: {
+        coinGeneratorLevel,
+        luckUpgrade1: luckUpgrades.luckUpgrade1,
+        luckUpgrade2: luckUpgrades.luckUpgrade2,
+        luckUpgrade3: luckUpgrades.luckUpgrade3,
+        hasAutoOpen,
+        hasAutoSell,
+        autoSellRarities: Array.from(autoSellRarities),
+        hasPets,
+        eggUpgrades,
+      },
+      rebirth: {
+        tokens: rebirthTokens,
+        count: rebirthCount,
+      },
+      eggs,
+      pets,
+      dropsHistory,
+      stats,
+      purchasedBoxes,
+      battle: {
+        wave: battleWave,
+        slots: battleSlots,
+      },
+    };
+    const blob = new Blob([JSON.stringify(save, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lootbox-save-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, dropsHistory, battleWave, battleSlots]);
+
+  const importSave = useCallback((data: string): boolean => {
+    try {
+      const save = JSON.parse(data) as GameSave;
+      if (!save.version || !save.player) {
+        return false;
+      }
+
+      // Load the save data
+      setLevel(save.player.level);
+      setXp(save.player.xp);
+      setCoins(save.player.coins);
+      setInventory(save.inventory || []);
+      setCoinGeneratorLevel(save.upgrades?.coinGeneratorLevel || 0);
+      setLuckUpgrades({
+        luckUpgrade1: save.upgrades?.luckUpgrade1 || 0,
+        luckUpgrade2: save.upgrades?.luckUpgrade2 || 0,
+        luckUpgrade3: save.upgrades?.luckUpgrade3 || 0,
+      });
+      setStats(save.stats || { totalChestsOpened: 0, totalCoinsEarned: 0, legendariesFound: 0 });
+      setPurchasedBoxes(save.purchasedBoxes || []);
+      setHasAutoOpen(save.upgrades?.hasAutoOpen || false);
+      setHasAutoSell(save.upgrades?.hasAutoSell || false);
+      setAutoSellRarities(new Set((save.upgrades?.autoSellRarities || []) as Rarity[]));
+      setHasPets(save.upgrades?.hasPets || false);
+      setEggUpgrades(save.upgrades?.eggUpgrades || { common: false, uncommon: false, rare: false, epic: false, legendary: false });
+      setEggs((save.eggs || []).map(e => ({ ...e, rarity: e.rarity as Rarity })));
+      setPets((save.pets || []).map(p => ({ ...p, rarity: p.rarity as Rarity, type: p.type as "dog" | "cat" })));
+      setDropsHistory((save.dropsHistory || []).map(d => ({ ...d, rarity: d.rarity as Rarity, category: d.category as ItemCategory })));
+      setRebirthTokens(save.rebirth?.tokens || 0);
+      setRebirthCount(save.rebirth?.count || 0);
+      setBattleWave(save.battle?.wave || 1);
+      setBattleSlots(save.battle?.slots || [null, null, null, null, null]);
+      setBattleStreak(0);
+
+      // Save to localStorage so it persists
+      saveGame(save);
+      return true;
+    } catch (e) {
+      console.error("Failed to import save:", e);
+      return false;
+    }
+  }, []);
+
   const handleHatchEgg = useCallback((eggId: string) => {
     const egg = eggs.find(e => e.id === eggId);
     if (!egg) return;
@@ -2182,15 +2348,54 @@ export default function App() {
     const won = wins >= 3;
 
     if (won) {
-      // Award 5 coins and advance wave
+      // Scale rewards with wave: base 5 + wave number
+      const baseCoins = 5 + battleWave;
+
+      // Streak bonus: +10% per consecutive win (max 100% at 10 streak)
+      const newStreak = battleStreak + 1;
+      const streakBonus = Math.min(newStreak * 0.10, 1.0);
+
+      // Rebirth bonus
       const rebirthBonus = rebirthCount * 0.10;
-      const earnedCoins = 5 * (1 + rebirthBonus);
+
+      // Calculate total coins
+      const earnedCoins = baseCoins * (1 + rebirthBonus) * (1 + streakBonus);
       setCoins(prev => prev + earnedCoins);
       setBattleWave(prev => prev + 1);
+      setBattleStreak(newStreak);
+
+      // Chance to drop a guaranteed rare+ item (20% base, +2% per wave, max 50%)
+      const dropChance = Math.min(0.20 + (battleWave * 0.02), 0.50);
+      if (Math.random() < dropChance) {
+        // Higher waves = better drops
+        const rarityRoll = Math.random();
+        let dropRarity: Rarity;
+        if (battleWave >= 10 && rarityRoll < 0.10) {
+          dropRarity = Rarity.Legendary;
+        } else if (battleWave >= 5 && rarityRoll < 0.30) {
+          dropRarity = Rarity.Epic;
+        } else {
+          dropRarity = Rarity.Rare;
+        }
+
+        const battleDrop = generateLootWithGuaranteedRarity(dropRarity);
+        if (battleDrop) {
+          setInventory(prev => [...prev, battleDrop]);
+          setDropsHistory(prev => [battleDrop, ...prev].slice(0, 1000));
+          setLastBattleDrop(battleDrop);
+          // Clear the drop notification after 3 seconds
+          setTimeout(() => setLastBattleDrop(null), 3000);
+        }
+      }
+
+      return { won, results, streak: newStreak, coinsEarned: earnedCoins };
+    } else {
+      // Lost - reset streak
+      setBattleStreak(0);
     }
 
-    return { won, results };
-  }, [battleSlots, inventory, battleWave, rebirthCount]);
+    return { won, results, streak: 0 };
+  }, [battleSlots, inventory, battleWave, rebirthCount, battleStreak]);
 
   const getChestEmoji = () => {
     if (chestState === "open") return "📭";
@@ -2213,7 +2418,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="version-tracker">vs: 1.01</div>
-      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} rebirthCount={rebirthCount} stats={stats} />
+      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} onExportSave={exportSave} onImportSave={importSave} rebirthCount={rebirthCount} stats={stats} />
 
       {hasAutoOpen && (
         <div className="auto-open-bar-container">
@@ -2396,12 +2601,18 @@ export default function App() {
           battleSlots={battleSlots}
           onUpdateSlots={setBattleSlots}
           wave={battleWave}
+          streak={battleStreak}
+          rebirthCount={rebirthCount}
           onBattle={handleBattle}
         />
       )}
 
       {showDropsHistory && (
-        <DropsHistory drops={dropsHistory} onClose={() => setShowDropsHistory(false)} />
+        <DropsHistory
+          drops={dropsHistory}
+          onClose={() => setShowDropsHistory(false)}
+          onClear={() => setDropsHistory([])}
+        />
       )}
 
       {offlineEarnings !== null && (

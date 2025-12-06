@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:bots": "npx tsx src/bot-test.ts",
+    "test:bots:quick": "npx tsx src/bot-test.ts 3 500",
+    "test:bots:thorough": "npx tsx src/bot-test.ts 10 5000 --verbose"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

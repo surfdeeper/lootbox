@@ -194,6 +194,8 @@ export interface GameSave {
 
   pets?: { id: string; name: string; type: string; rarity: string }[];
 
+  dropsHistory?: LootItem[];
+
   stats: {
     totalChestsOpened: number;
     totalCoinsEarned: number;
@@ -201,4 +203,9 @@ export interface GameSave {
   };
 
   purchasedBoxes?: string[]; // Bronze, Silver, Gold box upgrades
+
+  battle?: {
+    wave: number;
+    slots: (string | null)[]; // Item IDs for the 5 battle slots
+  };
 }

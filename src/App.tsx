@@ -777,6 +777,396 @@ function PetsMenu({
   );
 }
 
+type SortOrder = "newest" | "oldest";
+
+// Calculate weapon power from stats (shields return negative power, armor returns positive defensive power)
+function getWeaponPower(item: LootItem): number {
+  // Rarity multiplier
+  const rarityMultiplier: Record<Rarity, number> = {
+    [Rarity.Common]: 1,
+    [Rarity.Uncommon]: 1.5,
+    [Rarity.Rare]: 2.5,
+    [Rarity.Epic]: 4,
+    [Rarity.Legendary]: 7,
+  };
+
+  // Shields give negative power (reduces all enemy power globally)
+  if (item.category === ItemCategory.Shield) {
+    const shieldStats = item.stats as { capacity?: number; rechargeRate?: number; rechargeDelay?: number };
+    let shieldPower = 0;
+    if (shieldStats.capacity) shieldPower += shieldStats.capacity * 3;
+    if (shieldStats.rechargeRate) shieldPower += shieldStats.rechargeRate * 2;
+    return -(shieldPower * rarityMultiplier[item.rarity]);
+  }
+
+  // Armor gives defensive power (absorbs enemy damage in its slot)
+  if (item.category === ItemCategory.Armor) {
+    const armorStats = item.stats as { defense?: number; mobility?: number };
+    let armorPower = 0;
+    if (armorStats.defense) armorPower += armorStats.defense * 4;
+    if (armorStats.mobility) armorPower += armorStats.mobility * 1;
+    return armorPower * rarityMultiplier[item.rarity];
+  }
+
+  // Regular weapons
+  const stats = item.stats as { damage?: number; fireRate?: number; accuracy?: number; magazineSize?: number };
+  let power = 0;
+  if (stats.damage) power += stats.damage * 2;
+  if (stats.fireRate) power += stats.fireRate;
+  if (stats.accuracy) power += stats.accuracy * 0.5;
+  if (stats.magazineSize) power += stats.magazineSize * 0.3;
+
+  return power * rarityMultiplier[item.rarity];
+}
+
+// Check if item is a shield
+function isShield(item: LootItem): boolean {
+  return item.category === ItemCategory.Shield;
+}
+
+// Check if item is armor
+function isArmor(item: LootItem): boolean {
+  return item.category === ItemCategory.Armor;
+}
+
+// Generate enemy weapon power based on wave
+function generateEnemyPower(wave: number, slotIndex: number): number {
+  const basePower = 20 + (wave - 1) * 15;
+  const variance = (Math.random() - 0.5) * 20;
+  return Math.max(10, basePower + variance + slotIndex * 5);
+}
+
+function BattleMenu({
+  onClose,
+  inventory,
+  battleSlots,
+  onUpdateSlots,
+  wave,
+  onBattle,
+}: {
+  onClose: () => void;
+  inventory: LootItem[];
+  battleSlots: (string | null)[];
+  onUpdateSlots: (slots: (string | null)[]) => void;
+  wave: number;
+  onBattle: () => { won: boolean; results: { playerPower: number; enemyPower: number; won: boolean }[] };
+}) {
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [battleResults, setBattleResults] = useState<{ playerPower: number; enemyPower: number; won: boolean }[] | null>(null);
+  const [battleWon, setBattleWon] = useState<boolean | null>(null);
+
+  // Filter inventory to only show weapons, armor, and shields, sorted by power (best first, shields at end)
+  const weaponCategories = [ItemCategory.Pistol, ItemCategory.Rifle, ItemCategory.SMG, ItemCategory.Shotgun, ItemCategory.Sniper, ItemCategory.Heavy, ItemCategory.Armor, ItemCategory.Shield];
+  const weapons = inventory
+    .filter(item => weaponCategories.includes(item.category))
+    .sort((a, b) => getWeaponPower(b) - getWeaponPower(a));
+
+  const handleSelectWeapon = (itemId: string) => {
+    if (selectedSlot === null) return;
+
+    const newSlots = [...battleSlots];
+    // If this weapon is already in another slot, remove it from there
+    const existingIndex = newSlots.indexOf(itemId);
+    if (existingIndex !== -1) {
+      newSlots[existingIndex] = null;
+    }
+    newSlots[selectedSlot] = itemId;
+    onUpdateSlots(newSlots);
+    setSelectedSlot(null);
+  };
+
+  const handleClearSlot = (index: number) => {
+    const newSlots = [...battleSlots];
+    newSlots[index] = null;
+    onUpdateSlots(newSlots);
+  };
+
+  const handleBattle = () => {
+    const { won, results } = onBattle();
+    setBattleResults(results);
+    setBattleWon(won);
+  };
+
+  const handleCloseBattleResults = () => {
+    setBattleResults(null);
+    setBattleWon(null);
+  };
+
+  const filledSlots = battleSlots.filter(s => s !== null).length;
+  const canBattle = filledSlots > 0;
+
+  return (
+    <div className="battle-overlay" onClick={onClose}>
+      <div className="battle-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="battle-header">
+          <h2>Battle ⚔️</h2>
+          <span className="battle-wave">Wave {wave}</span>
+          <button className="battle-close-btn" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="battle-content">
+          <div className="battle-slots-section">
+            <h3>Your Weapons</h3>
+            <div className="battle-slots-grid">
+              {battleSlots.map((slotId, index) => {
+                const item = slotId ? inventory.find(i => i.id === slotId) : null;
+                return (
+                  <div
+                    key={index}
+                    className={`battle-slot ${selectedSlot === index ? 'selected' : ''} ${item ? 'has-weapon' : ''}`}
+                    style={{ borderColor: item ? RARITY_COLORS[item.rarity] : undefined }}
+                    onClick={() => setSelectedSlot(selectedSlot === index ? null : index)}
+                  >
+                    {item ? (
+                      <>
+                        <div className="battle-slot-content" style={{ borderColor: RARITY_COLORS[item.rarity] }}>
+                          <ItemIcon category={item.category} color={RARITY_COLORS[item.rarity]} size={32} />
+                        </div>
+                        <span className="battle-slot-name" style={{ color: RARITY_COLORS[item.rarity] }}>
+                          {item.name}
+                        </span>
+                        <span className="battle-slot-power">
+                          {isArmor(item) ? '🛡️' : '⚡'} {Math.round(getWeaponPower(item))}
+                        </span>
+                        <button
+                          className="battle-slot-clear"
+                          onClick={(e) => { e.stopPropagation(); handleClearSlot(index); }}
+                        >
+                          ✕
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="battle-slot-content empty">
+                          <span className="battle-slot-empty">?</span>
+                        </div>
+                        <span className="battle-slot-label">Slot {index + 1}</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedSlot !== null && (
+            <div className="battle-weapon-picker">
+              <h3>Select Weapon for Slot {selectedSlot + 1}</h3>
+              <div className="battle-weapon-list">
+                {weapons.length === 0 ? (
+                  <p className="no-weapons-message">No weapons in inventory!</p>
+                ) : (
+                  weapons.map(weapon => {
+                    const isEquipped = battleSlots.includes(weapon.id);
+                    return (
+                      <div
+                        key={weapon.id}
+                        className={`battle-weapon-item ${isEquipped ? 'equipped' : ''}`}
+                        style={{ borderColor: RARITY_COLORS[weapon.rarity] }}
+                        onClick={() => handleSelectWeapon(weapon.id)}
+                      >
+                        <div className="item-icon-wrapper" style={{ borderColor: RARITY_COLORS[weapon.rarity] }}>
+                          <ItemIcon category={weapon.category} color={RARITY_COLORS[weapon.rarity]} size={24} />
+                        </div>
+                        <span className="weapon-name" style={{ color: RARITY_COLORS[weapon.rarity] }}>
+                          {weapon.name}
+                        </span>
+                        <span className="weapon-power">{isArmor(weapon) ? '🛡️' : '⚡'} {Math.round(getWeaponPower(weapon))}</span>
+                        {isEquipped && <span className="equipped-badge">Equipped</span>}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          <button
+            className={`battle-fight-btn ${!canBattle ? 'disabled' : ''}`}
+            onClick={handleBattle}
+            disabled={!canBattle}
+          >
+            ⚔️ Fight Wave {wave}!
+          </button>
+        </div>
+      </div>
+
+      {battleResults && (
+        <div className="battle-results-overlay" onClick={handleCloseBattleResults}>
+          <div className="battle-results-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className={battleWon ? 'victory' : 'defeat'}>
+              {battleWon ? '🏆 Victory!' : '💀 Defeat!'}
+            </h2>
+            <div className="battle-results-grid">
+              {battleResults.map((result, index) => (
+                <div key={index} className={`battle-result-row ${result.won ? 'won' : 'lost'}`}>
+                  <span className="result-slot">Slot {index + 1}</span>
+                  <span className="result-player">⚡ {Math.round(result.playerPower)}</span>
+                  <span className="result-vs">vs</span>
+                  <span className="result-enemy">⚡ {Math.round(result.enemyPower)}</span>
+                  <span className="result-outcome">{result.won ? '✓' : '✗'}</span>
+                </div>
+              ))}
+            </div>
+            <div className="battle-results-summary">
+              {battleWon ? (
+                <p>You won {battleResults.filter(r => r.won).length}/5 battles! +5 coins</p>
+              ) : (
+                <p>You only won {battleResults.filter(r => r.won).length}/5 battles. Try again!</p>
+              )}
+            </div>
+            <button className="battle-results-close-btn" onClick={handleCloseBattleResults}>
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DropsHistory({
+  drops,
+  onClose,
+}: {
+  drops: LootItem[];
+  onClose: () => void;
+}) {
+  const [filter, setFilter] = useState<RarityFilter>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedItem, setSelectedItem] = useState<LootItem | null>(null);
+
+  const rarityOrder: Rarity[] = [
+    Rarity.Legendary,
+    Rarity.Epic,
+    Rarity.Rare,
+    Rarity.Uncommon,
+    Rarity.Common,
+  ];
+
+  const filteredDrops = useMemo(() => {
+    let result = [...drops];
+
+    // Filter by rarity
+    if (filter !== "all") {
+      result = result.filter((item) => item.rarity === filter);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((item) =>
+        item.name.toLowerCase().includes(query) ||
+        item.category.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort by order (drops are already newest first, so reverse for oldest)
+    if (sortOrder === "oldest") {
+      result = result.reverse();
+    }
+
+    return result;
+  }, [drops, filter, sortOrder, searchQuery]);
+
+  const rarityCounts = drops.reduce((acc, item) => {
+    acc[item.rarity] = (acc[item.rarity] || 0) + 1;
+    return acc;
+  }, {} as Record<Rarity, number>);
+
+  return (
+    <div className="drops-history-overlay" onClick={onClose}>
+      <div className="drops-history-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="drops-history-header">
+          <h2>Drops History</h2>
+          <button className="drops-history-close-btn" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="drops-history-filters">
+          <div className="drops-history-search">
+            <input
+              type="text"
+              placeholder="Search drops..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="drops-history-search-input"
+            />
+          </div>
+
+          <div className="drops-history-sort">
+            <button
+              className={`sort-btn ${sortOrder === "newest" ? "active" : ""}`}
+              onClick={() => setSortOrder("newest")}
+            >
+              Newest
+            </button>
+            <button
+              className={`sort-btn ${sortOrder === "oldest" ? "active" : ""}`}
+              onClick={() => setSortOrder("oldest")}
+            >
+              Oldest
+            </button>
+          </div>
+        </div>
+
+        <div className="drops-history-tabs">
+          <button
+            className={`tab ${filter === "all" ? "active" : ""}`}
+            onClick={() => setFilter("all")}
+          >
+            All ({drops.length})
+          </button>
+          {rarityOrder.map((rarity) => (
+            <button
+              key={rarity}
+              className={`tab tab-${rarity} ${filter === rarity ? "active" : ""}`}
+              onClick={() => setFilter(rarity)}
+            >
+              {RARITY_EMOJIS[rarity]} {rarityCounts[rarity] || 0}
+            </button>
+          ))}
+        </div>
+
+        <div className="drops-history-list">
+          {filteredDrops.length === 0 ? (
+            <p className="empty-drops">
+              {drops.length === 0
+                ? "No drops yet. Open some chests!"
+                : "No drops match your filters."}
+            </p>
+          ) : (
+            filteredDrops.map((item, index) => (
+              <div
+                key={`${item.id}-${index}`}
+                className="drops-history-item"
+                onClick={() => setSelectedItem(item)}
+              >
+                <div className="item-icon-wrapper" style={{ borderColor: RARITY_COLORS[item.rarity] }}>
+                  <ItemIcon category={item.category} color={RARITY_COLORS[item.rarity]} size={24} />
+                </div>
+                <span className="drop-name" style={{ color: RARITY_COLORS[item.rarity] }}>
+                  {item.name}
+                </span>
+                <span className="drop-category">{item.category}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {selectedItem && (
+        <ItemDetailModal
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function Inventory({
   items,
   onClose,
@@ -1140,7 +1530,7 @@ function Inventory({
   );
 }
 
-function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, rebirthCount }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; rebirthCount: number }) {
+function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, rebirthCount, stats }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; rebirthCount: number; stats: { totalChestsOpened: number; totalCoinsEarned: number; legendariesFound: number } }) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
   const [activeSettingsTab, setActiveSettingsTab] = useState<string | null>(null);
@@ -1165,13 +1555,21 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
       {showSettings && (
         <div className="settings-dropdown">
           <div className="settings-buttons">
-            <button 
+            <button
               className={`settings-tab-btn ${activeSettingsTab === 'controls' ? 'active' : ''}`}
               onClick={() => setActiveSettingsTab(activeSettingsTab === 'controls' ? null : 'controls')}
+              title="Controls"
             >
               ⌨️
             </button>
-            <button 
+            <button
+              className={`settings-tab-btn ${activeSettingsTab === 'stats' ? 'active' : ''}`}
+              onClick={() => setActiveSettingsTab(activeSettingsTab === 'stats' ? null : 'stats')}
+              title="Stats"
+            >
+              📊
+            </button>
+            <button
               className="settings-tab-btn"
               onClick={handleManualSave}
               title="Manual Save"
@@ -1193,6 +1591,25 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
                 <div className="control-item">
                   <span className="control-key">Esc</span>
                   <span className="control-description">Close menus</span>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeSettingsTab === 'stats' && (
+            <div className="settings-section">
+              <h3 className="settings-section-title">📊 Stats</h3>
+              <div className="settings-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Chests Opened</span>
+                  <span className="stat-value">{stats.totalChestsOpened.toLocaleString()}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Total Coins Earned</span>
+                  <span className="stat-value">{stats.totalCoinsEarned.toFixed(2)}</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Legendaries Found</span>
+                  <span className="stat-value">{stats.legendariesFound.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -1267,10 +1684,15 @@ export default function App() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [recentEgg, setRecentEgg] = useState<Rarity | null>(null);
   const [levelUpNotification, setLevelUpNotification] = useState<number | null>(null);
-  const [recentDrops, setRecentDrops] = useState<LootItem[]>([]);
+  const [dropsHistory, setDropsHistory] = useState<LootItem[]>([]);
+  const [showDropsHistory, setShowDropsHistory] = useState(false);
   const [showCodeInput, setShowCodeInput] = useState(false);
   const [codeValue, setCodeValue] = useState("");
   const [usedCheatCode, setUsedCheatCode] = useState(false);
+  const [autoOpenProgress, setAutoOpenProgress] = useState(0);
+  const [showBattle, setShowBattle] = useState(false);
+  const [battleWave, setBattleWave] = useState(1);
+  const [battleSlots, setBattleSlots] = useState<(string | null)[]>([null, null, null, null, null]);
   const initialLoadRef = useRef(false);
   const loadedLevelRef = useRef<number | null>(null);
   const saveEnabledRef = useRef(false);
@@ -1308,8 +1730,11 @@ export default function App() {
       });
       setEggs((save.eggs || []).map(e => ({ ...e, rarity: e.rarity as Rarity })));
       setPets((save.pets || []).map(p => ({ ...p, rarity: p.rarity as Rarity, type: p.type as "dog" | "cat" })));
+      setDropsHistory((save.dropsHistory || []).map(d => ({ ...d, rarity: d.rarity as Rarity, category: d.category as ItemCategory })));
       setRebirthTokens(save.rebirth?.tokens || 0);
       setRebirthCount(save.rebirth?.count || 0);
+      setBattleWave(save.battle?.wave || 1);
+      setBattleSlots(save.battle?.slots || [null, null, null, null, null]);
 
       // Calculate offline earnings
       const earnings = calculateOfflineEarnings(save.lastSaved, save.upgrades.coinGeneratorLevel);
@@ -1363,11 +1788,16 @@ export default function App() {
       },
       eggs,
       pets,
+      dropsHistory,
       stats,
       purchasedBoxes,
+      battle: {
+        wave: battleWave,
+        slots: battleSlots,
+      },
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, dropsHistory, battleWave, battleSlots]);
 
   // Show level-up notification - only when level actually increases from gameplay
   const prevLevelRef = useRef<number>(level);
@@ -1396,19 +1826,34 @@ export default function App() {
     return () => clearInterval(interval);
   }, [coinGeneratorLevel, rebirthCount]);
 
-  // Auto-open chests
+  // Auto-open chests with progress tracking
   useEffect(() => {
     if (!hasAutoOpen || !isLoaded) return;
 
-    const interval = setInterval(() => {
-      // Only auto-open if not currently opening and no modals are open
-      if (!isOpening && !showInventory && !showShop) {
-        openChest();
-      }
-    }, 5000);
+    const AUTO_OPEN_INTERVAL = 5000; // 5 seconds
+    const PROGRESS_UPDATE_INTERVAL = 50; // Update progress every 50ms
+    let elapsed = 0;
 
-    return () => clearInterval(interval);
-  }, [hasAutoOpen, isLoaded, isOpening, showInventory, showShop]);
+    const progressInterval = setInterval(() => {
+      // Only count progress if not currently opening and no modals are open
+      if (!isOpening && !showInventory && !showShop && !showPets && !showDropsHistory && !showBattle) {
+        elapsed += PROGRESS_UPDATE_INTERVAL;
+        const progress = (elapsed / AUTO_OPEN_INTERVAL) * 100;
+        setAutoOpenProgress(Math.min(progress, 100));
+
+        if (elapsed >= AUTO_OPEN_INTERVAL) {
+          openChest();
+          elapsed = 0;
+          setAutoOpenProgress(0);
+        }
+      }
+    }, PROGRESS_UPDATE_INTERVAL);
+
+    return () => {
+      clearInterval(progressInterval);
+      setAutoOpenProgress(0);
+    };
+  }, [hasAutoOpen, isLoaded, isOpening, showInventory, showShop, showPets, showDropsHistory, showBattle]);
 
   const getBoxRarityWeights = useCallback((): Record<Rarity, number> => {
     const baseWeights = calculateRarityWeights(luckUpgrades);
@@ -1462,8 +1907,8 @@ export default function App() {
         setInventory((prev) => [...prev, newLoot]);
       }
 
-      // Add to recent drops (keep last 5)
-      setRecentDrops(prev => [newLoot, ...prev].slice(0, 5));
+      // Add to drops history
+      setDropsHistory(prev => [newLoot, ...prev]);
 
       // Play sound effect based on rarity
       playChestOpenSound(newLoot.rarity);
@@ -1512,7 +1957,7 @@ export default function App() {
   // Spacebar to open chest
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !showInventory && !showShop && !showSettings) {
+      if (e.code === "Space" && !showInventory && !showShop && !showSettings && !showBattle) {
         e.preventDefault();
         openChest();
       }
@@ -1520,12 +1965,13 @@ export default function App() {
         if (showInventory) setShowInventory(false);
         if (showShop) setShowShop(false);
         if (showSettings) setShowSettings(false);
+        if (showBattle) setShowBattle(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpening, showInventory, showShop, showSettings]);
+  }, [isOpening, showInventory, showShop, showSettings, showBattle]);
 
   const handleSellItem = useCallback((itemId: string) => {
     const item = inventory.find(i => i.id === itemId);
@@ -1615,11 +2061,16 @@ export default function App() {
       },
       eggs,
       pets,
+      dropsHistory,
       stats,
       purchasedBoxes,
+      battle: {
+        wave: battleWave,
+        slots: battleSlots,
+      },
     };
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, eggUpgrades, eggs, pets, dropsHistory, battleWave, battleSlots]);
 
   const handleHatchEgg = useCallback((eggId: string) => {
     const egg = eggs.find(e => e.id === eggId);
@@ -1660,13 +2111,82 @@ export default function App() {
       setHasAutoSell(false);
       setAutoSellRarities(new Set());
       setPurchasedBoxes([]);
-      setRecentDrops([]);
+      setDropsHistory([]);
       setEggUpgrades({ common: false, uncommon: false, rare: false, epic: false, legendary: false });
+      // Reset battle wave and slots
+      setBattleWave(1);
+      setBattleSlots([null, null, null, null, null]);
       // Award rebirth token
       setRebirthTokens(prev => prev + 1);
       setRebirthCount(prev => prev + 1);
     }
   }, [coins, getRebirthCost]);
+
+  const handleBattle = useCallback(() => {
+    const results: { playerPower: number; enemyPower: number; won: boolean; isArmor?: boolean }[] = [];
+
+    // Calculate total shield reduction (shields have negative power)
+    let totalShieldReduction = 0;
+    for (const slotId of battleSlots) {
+      if (slotId) {
+        const item = inventory.find(it => it.id === slotId);
+        if (item && isShield(item)) {
+          totalShieldReduction += Math.abs(getWeaponPower(item)); // Get positive value for reduction
+        }
+      }
+    }
+    // Distribute shield reduction equally among all 5 enemies
+    const shieldReductionPerEnemy = totalShieldReduction / 5;
+
+    for (let i = 0; i < 5; i++) {
+      const slotId = battleSlots[i];
+      const item = slotId ? inventory.find(it => it.id === slotId) : null;
+      const rawPower = item ? getWeaponPower(item) : 0;
+      const baseEnemyPower = generateEnemyPower(battleWave, i);
+      // Apply shield reduction to enemy power
+      const enemyPowerAfterShield = Math.max(0, baseEnemyPower - shieldReductionPerEnemy);
+
+      if (item && isArmor(item)) {
+        // Armor absorbs enemy damage - armor power reduces enemy power for this slot
+        const armorPower = rawPower;
+        const effectiveEnemyPower = Math.max(0, enemyPowerAfterShield - armorPower);
+        // Win if armor fully absorbs the enemy attack
+        results.push({
+          playerPower: armorPower,
+          enemyPower: enemyPowerAfterShield,
+          won: armorPower >= enemyPowerAfterShield,
+          isArmor: true,
+        });
+      } else if (item && isShield(item)) {
+        // Shields don't fight directly - they already applied their reduction globally
+        results.push({
+          playerPower: rawPower,
+          enemyPower: enemyPowerAfterShield,
+          won: false, // Shields alone can't win a slot
+        });
+      } else {
+        // Regular weapons - direct power comparison
+        results.push({
+          playerPower: rawPower,
+          enemyPower: enemyPowerAfterShield,
+          won: rawPower > enemyPowerAfterShield,
+        });
+      }
+    }
+
+    const wins = results.filter(r => r.won).length;
+    const won = wins >= 3;
+
+    if (won) {
+      // Award 5 coins and advance wave
+      const rebirthBonus = rebirthCount * 0.10;
+      const earnedCoins = 5 * (1 + rebirthBonus);
+      setCoins(prev => prev + earnedCoins);
+      setBattleWave(prev => prev + 1);
+    }
+
+    return { won, results };
+  }, [battleSlots, inventory, battleWave, rebirthCount]);
 
   const getChestEmoji = () => {
     if (chestState === "open") return "📭";
@@ -1689,7 +2209,19 @@ export default function App() {
   return (
     <div className="app">
       <div className="version-tracker">vs: 1.00</div>
-      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} rebirthCount={rebirthCount} />
+      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} rebirthCount={rebirthCount} stats={stats} />
+
+      {hasAutoOpen && (
+        <div className="auto-open-bar-container">
+          <div className="auto-open-bar-track">
+            <div
+              className="auto-open-bar-fill"
+              style={{ width: `${autoOpenProgress}%` }}
+            />
+          </div>
+          <span className="auto-open-label">Auto Open</span>
+        </div>
+      )}
 
       <button
         className={`rebirth-btn ${coins >= getRebirthCost() ? '' : 'disabled'}`}
@@ -1699,6 +2231,10 @@ export default function App() {
         <span className="rebirth-icon">🔄</span>
         <span className="rebirth-text">Rebirth</span>
         <span className="rebirth-cost">💰 {getRebirthCost()}</span>
+      </button>
+
+      <button className="battle-btn" onClick={() => setShowBattle(true)}>
+        ⚔️ Battle
       </button>
 
       {hasPets && (
@@ -1717,21 +2253,9 @@ export default function App() {
         </div>
       )}
 
-      {recentDrops.length > 0 && (
-        <div className="recent-drops">
-          <h3>Recent Drops</h3>
-          <div className="recent-drops-list">
-            {recentDrops.map((item, index) => (
-              <div key={`${item.id}-${index}`} className="recent-drop-item" style={{ borderColor: RARITY_COLORS[item.rarity] }}>
-                <ItemIcon category={item.category} color={RARITY_COLORS[item.rarity]} size={20} />
-                <span className="recent-drop-name" style={{ color: RARITY_COLORS[item.rarity] }}>
-                  {item.name}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <button className="drops-history-btn" onClick={() => setShowDropsHistory(true)}>
+        📜 Drops ({dropsHistory.length})
+      </button>
 
       <button className="shop-btn" onClick={() => setShowShop(true)}>
         🛒 Shop
@@ -1859,6 +2383,21 @@ export default function App() {
 
       {showPets && (
         <PetsMenu onClose={() => setShowPets(false)} eggs={eggs} pets={pets} onHatchEgg={handleHatchEgg} />
+      )}
+
+      {showBattle && (
+        <BattleMenu
+          onClose={() => setShowBattle(false)}
+          inventory={inventory}
+          battleSlots={battleSlots}
+          onUpdateSlots={setBattleSlots}
+          wave={battleWave}
+          onBattle={handleBattle}
+        />
+      )}
+
+      {showDropsHistory && (
+        <DropsHistory drops={dropsHistory} onClose={() => setShowDropsHistory(false)} />
       )}
 
       {offlineEarnings !== null && (

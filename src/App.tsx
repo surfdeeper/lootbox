@@ -1774,12 +1774,15 @@ function Inventory({
   );
 }
 
-function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, onExportSave, onImportSave, rebirthCount, stats }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; onExportSave: () => void; onImportSave: (data: string) => boolean; rebirthCount: number; stats: { totalChestsOpened: number; totalCoinsEarned: number; legendariesFound: number } }) {
+function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings, coinGeneratorLevel, onManualSave, onExportSave, onImportSave, rebirthCount, stats, totalDogBonus, totalCatBonus }: { xp: number; level: number; coins: number; rebirthTokens: number; showSettings: boolean; onToggleSettings: () => void; coinGeneratorLevel: number; onManualSave: () => void; onExportSave: () => void; onImportSave: (data: string) => boolean; rebirthCount: number; stats: { totalChestsOpened: number; totalCoinsEarned: number; legendariesFound: number }; totalDogBonus: number; totalCatBonus: number }) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
   const [activeSettingsTab, setActiveSettingsTab] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string>("");
-  const coinsPerSecond = coinGeneratorLevel * 0.01;
+  const baseCoinsPerSecond = coinGeneratorLevel * 0.01;
+  const rebirthBonus = rebirthCount * 0.10;
+  const dogBonus = totalDogBonus / 100;
+  const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus + dogBonus);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleManualSave = () => {
@@ -1922,9 +1925,17 @@ function XPBar({ xp, level, coins, rebirthTokens, showSettings, onToggleSettings
           <span className="coin-rate">+{coinsPerSecond.toFixed(2)}/s</span>
         )}
       </div>
-      {rebirthCount > 0 && (
-        <div className="rebirth-bonus-display">
-          <span className="rebirth-bonus-text">+{rebirthCount * 10}% Coin Bonus</span>
+      {(rebirthCount > 0 || totalDogBonus > 0 || totalCatBonus > 0) && (
+        <div className="bonuses-display">
+          {rebirthCount > 0 && (
+            <span className="rebirth-bonus-text">+{rebirthCount * 10}% Rebirth</span>
+          )}
+          {totalDogBonus > 0 && (
+            <span className="dog-bonus-text">+{totalDogBonus}% Coins</span>
+          )}
+          {totalCatBonus > 0 && (
+            <span className="cat-bonus-text">+{totalCatBonus}% Legendary</span>
+          )}
         </div>
       )}
       <div className="rebirth-tokens-display">
@@ -2699,7 +2710,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="version-tracker">vs: 1.01</div>
-      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} onExportSave={exportSave} onImportSave={importSave} rebirthCount={rebirthCount} stats={stats} />
+      <XPBar xp={xp} level={level} coins={coins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={coinGeneratorLevel} onManualSave={manualSave} onExportSave={exportSave} onImportSave={importSave} rebirthCount={rebirthCount} stats={stats} totalDogBonus={totalDogBonus} totalCatBonus={totalCatBonus} />
 
       {hasAutoOpen && (
         <div className="auto-open-bar-container">

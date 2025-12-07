@@ -13,6 +13,7 @@ body {
 
 #root {
   min-height: 100vh;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -25,6 +26,7 @@ body {
   align-items: center;
   gap: 2rem;
   padding: 2rem;
+  width: 100%;
 }
 
 .title {
@@ -52,7 +54,7 @@ body {
 }
 
 .chest-container:active {
-  transform: scale(0.95);
+  transform: scale(1);
 }
 
 .chest {
@@ -1173,7 +1175,13 @@ body {
 /* Shop Modal */
 .shop-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   display: flex;
   flex-direction: column;
@@ -4043,6 +4051,9 @@ body {
 
 /* Small 2x Bonus Banner - positioned below auto-open bar */
 .bonus-event-banner-small {
+  position: fixed;
+  bottom: 1.5rem;
+  left: calc(50% + 60px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4053,6 +4064,7 @@ body {
   border-radius: 4px;
   font-size: 0.7rem;
   animation: bonusPulse 1s ease-in-out infinite;
+  z-index: 100;
 }
 
 .bonus-small-icon {
@@ -4159,6 +4171,9 @@ body {
 
 /* Next Area Button */
 .next-area-btn {
+  position: fixed;
+  bottom: 5rem;
+  right: 1.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4171,7 +4186,7 @@ body {
   font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  margin-bottom: 0.5rem;
+  z-index: 100;
 }
 
 .next-area-btn:hover:not(.disabled) {
@@ -4200,6 +4215,9 @@ body {
 
 /* Back Area Button */
 .back-area-btn {
+  position: fixed;
+  bottom: 5rem;
+  right: 1.5rem;
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -4211,7 +4229,7 @@ body {
   font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  margin-bottom: 0.5rem;
+  z-index: 100;
 }
 
 .back-area-btn:hover {
@@ -4284,4 +4302,295 @@ body {
 .hatch-all-btn:hover {
   transform: scale(1.05);
   box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+/* Tablets and smaller desktops (max-width: 1024px) */
+@media (max-width: 1024px) {
+  .app {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .chest-container {
+    margin-top: 6rem;
+  }
+
+  .chest {
+    font-size: 6rem;
+  }
+
+  .loot-item {
+    min-width: 280px;
+    max-width: 320px;
+    padding: 1rem 1.5rem;
+  }
+
+  .inventory-overlay .inventory-modal,
+  .shop-overlay .shop-modal {
+    width: 95%;
+    max-width: 600px;
+    max-height: 85vh;
+  }
+}
+
+/* Mobile devices (max-width: 768px) */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+
+  .app {
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .chest-container {
+    margin-top: 4rem;
+  }
+
+  .chest {
+    font-size: 5rem;
+  }
+
+  .hint {
+    font-size: 0.875rem;
+  }
+
+  .loot-item {
+    min-width: 90vw;
+    max-width: 95vw;
+    padding: 1rem;
+  }
+
+  .loot-item h3 {
+    font-size: 1.1rem;
+  }
+
+  /* Modals fill the screen on mobile */
+  .inventory-overlay .inventory-modal,
+  .shop-overlay .shop-modal,
+  .pets-modal,
+  .battle-modal,
+  .drops-history-overlay .drops-history-modal,
+  .challenges-modal,
+  .settings-modal {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  /* Inventory grid adjusts for mobile */
+  .inventory-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .inventory-item {
+    padding: 0.5rem;
+  }
+
+  /* Shop sections stack on mobile */
+  .shop-sections {
+    flex-direction: column;
+  }
+
+  .shop-section {
+    min-width: 100%;
+  }
+
+  /* Buttons - larger touch targets */
+  .shop-btn,
+  .inventory-btn,
+  .battle-btn,
+  .pets-btn,
+  .drops-history-btn,
+  .challenges-btn,
+  .code-btn,
+  .next-area-btn,
+  .back-area-btn {
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Battle slots stack on mobile */
+  .battle-slots {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .battle-slot {
+    width: 100%;
+    min-height: 60px;
+  }
+
+  /* XP bar adjustments */
+  .xp-bar-container {
+    padding: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .xp-bar {
+    width: 100%;
+  }
+
+  /* Rebirth/Prestige buttons */
+  .rebirth-prestige-container {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .rebirth-btn,
+  .prestige-btn {
+    width: 100%;
+  }
+
+  /* Pet grid */
+  .pets-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  /* Eggs list */
+  .eggs-list {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+}
+
+/* Small mobile devices (max-width: 480px) */
+@media (max-width: 480px) {
+  .chest-container {
+    margin-top: 3rem;
+  }
+
+  .chest {
+    font-size: 4rem;
+  }
+
+  .loot-item h3 {
+    font-size: 1rem;
+  }
+
+  .loot-item .item-description {
+    font-size: 0.85rem;
+  }
+
+  .inventory-grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 0.35rem;
+  }
+
+  .shop-item {
+    padding: 0.75rem;
+  }
+
+  /* Hide less important labels on very small screens */
+  .auto-open-label {
+    display: none;
+  }
+
+  .bonus-small-text {
+    font-size: 0.85rem;
+  }
+
+  /* Make notifications smaller */
+  .level-up-notification,
+  .critical-hit-notification {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+  }
+}
+
+/* Touch device improvements */
+@media (pointer: coarse) {
+  /* Larger touch targets */
+  .close-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.5rem;
+  }
+
+  .inventory-item {
+    min-height: 60px;
+  }
+
+  .shop-item-btn {
+    min-height: 48px;
+  }
+
+  /* Disable hover effects that don't work on touch */
+  .chest-container:hover {
+    transform: none;
+  }
+
+  .chest-container:active {
+    transform: scale(0.95);
+  }
+}
+
+/* Landscape mode on mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  .chest-container {
+    margin-top: 1rem;
+  }
+
+  .chest {
+    font-size: 3rem;
+  }
+
+  .loot-display {
+    min-height: 100px;
+  }
+
+  .inventory-overlay .inventory-modal,
+  .shop-overlay .shop-modal {
+    height: 95vh;
+  }
+}
+
+/* Ensure scrollable areas work on iOS */
+.inventory-content,
+.shop-content,
+.battle-content,
+.pets-content,
+.drops-history-content {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .loot-item {
+    border-width: 3px;
+  }
+
+  .inventory-item {
+    border-width: 2px;
+  }
+
+  button {
+    border-width: 2px;
+  }
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .chest.opening {
+    animation: none;
+  }
 }

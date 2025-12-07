@@ -194,6 +194,15 @@ export interface GameSave {
     count: number; // Number of prestiges - each gives 100% permanent bonus
   };
 
+  galaxyRebirth?: {
+    tokens: number;
+    count: number;
+  };
+
+  galaxyPrestige?: {
+    count: number;
+  };
+
   area?: number; // Current area (1 = default, 2 = galaxy, etc.)
 
   eggs?: { rarity: string; id: string }[];
@@ -201,6 +210,12 @@ export interface GameSave {
   pets?: { id: string; name: string; type: string; rarity: string; bonus?: number; count?: number }[];
 
   equippedPets?: string[]; // IDs of pets equipped in the 6 slots
+
+  galaxyEggs?: { rarity: string; id: string }[];
+
+  galaxyPets?: { id: string; name: string; type: string; rarity: string; bonus?: number; count?: number }[];
+
+  galaxyEquippedPets?: string[]; // IDs of galaxy pets equipped
 
   dropsHistory?: LootItem[];
 
@@ -215,5 +230,23 @@ export interface GameSave {
   battle?: {
     wave: number;
     slots: (string | null)[]; // Item IDs for the 5 battle slots
+  };
+
+  // Galaxy area-specific state (separate from area 1)
+  galaxyState?: {
+    coins: number;
+    xp: number;
+    level: number;
+    inventory: LootItem[];
+    coinGeneratorLevel: number;
+    luckUpgrades: { luckUpgrade1: number; luckUpgrade2: number; luckUpgrade3: number };
+    hasAutoOpen: boolean;
+    hasAutoSell: boolean;
+    autoSellRarities: string[];
+    purchasedBoxes: string[];
+    dropsHistory: LootItem[];
+    eggUpgrades: { common: boolean; uncommon: boolean; rare: boolean; epic: boolean; legendary: boolean };
+    battleWave: number;
+    battleSlots: (string | null)[];
   };
 }

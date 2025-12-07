@@ -48,6 +48,9 @@ export interface GameStateForSave {
   galaxyEggs: { rarity: Rarity; id: string }[];
   galaxyPets: Pet[];
   galaxyEquippedPets: string[];
+  // Permanent prestige upgrades (survives prestige)
+  permanentCoinGen: number;
+  galaxyPermanentCoinGen: number;
   // Galaxy area-specific state (separate from area 1)
   galaxyCoins?: number;
   galaxyXp?: number;
@@ -96,6 +99,7 @@ export function createGameSave(state: GameStateForSave): GameSave {
     },
     prestige: {
       count: state.prestigeCount,
+      permanentCoinGen: state.permanentCoinGen,
     },
     galaxyRebirth: {
       tokens: state.galaxyRebirthTokens,
@@ -103,6 +107,7 @@ export function createGameSave(state: GameStateForSave): GameSave {
     },
     galaxyPrestige: {
       count: state.galaxyPrestigeCount,
+      permanentCoinGen: state.galaxyPermanentCoinGen,
     },
     area: state.currentArea,
     eggs: state.eggs,

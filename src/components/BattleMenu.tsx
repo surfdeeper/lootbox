@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LootItem, ItemCategory, RARITY_COLORS } from "../types";
 import { getWeaponPower, isShield, isArmor } from "../game/battle";
 import { ItemIcon } from "./ItemIcon";
+import { formatNumber } from "../utils/format";
 
 interface BattleMenuProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ interface BattleMenuProps {
   streak: number;
   rebirthCount: number;
   onBattle: () => { won: boolean; results: { playerPower: number; enemyPower: number; won: boolean }[]; streak?: number; coinsEarned?: number };
+  currentArea: number;
 }
 
 export function BattleMenu({
@@ -23,6 +25,7 @@ export function BattleMenu({
   streak,
   rebirthCount,
   onBattle,
+  currentArea,
 }: BattleMenuProps) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [battleResults, setBattleResults] = useState<{ playerPower: number; enemyPower: number; won: boolean }[] | null>(null);
@@ -154,18 +157,13 @@ export function BattleMenu({
           <span className="reward-label">Win Reward:</span>
           <span className="reward-coins">
             {(() => {
-              let baseCoins = 5 + wave;
-              // Early wave bonus (waves 1-3)
-              if (wave <= 3) {
-                baseCoins += (4 - wave) * 3;
-              }
+              const baseCoins = 5;
               const streakBonus = Math.min((streak + 1) * 0.10, 1.0);
               const rebirthBonus = rebirthCount * 0.10;
               const total = baseCoins * (1 + rebirthBonus) * (1 + streakBonus);
-              return `${total.toFixed(1)} coins`;
+              return `${formatNumber(total)} ${currentArea === 2 ? 'space coins' : 'coins'}`;
             })()}
           </span>
-          {wave <= 3 && <span className="early-wave-bonus">Early wave bonus!</span>}
           <span className="reward-drop">+ chance for rare+ drop</span>
         </div>
 
@@ -306,7 +304,7 @@ export function BattleMenu({
             </div>
             <div className="battle-results-summary">
               {battleWon ? (
-                <p>You won {battleResults.filter(r => r.won).length}/5 battles! +5 coins</p>
+                <p>You won {battleResults.filter(r => r.won).length}/5 battles!</p>
               ) : (
                 <p>You only won {battleResults.filter(r => r.won).length}/5 battles. Try again!</p>
               )}
@@ -325,13 +323,13 @@ export function BattleMenu({
               {autoBattleResults.isMax ? (
                 <>
                   <p className="max-battle-wins">🏆 {autoBattleResults.wins} Consecutive Wins!</p>
-                  <p>Total Coins: +{autoBattleResults.totalCoins.toFixed(1)}</p>
+                  <p>Total {currentArea === 2 ? 'Space Coins' : 'Coins'}: +{formatNumber(autoBattleResults.totalCoins)}</p>
                 </>
               ) : (
                 <>
                   <p>Wins: {autoBattleResults.wins}/10</p>
                   <p>Losses: {autoBattleResults.losses}/10</p>
-                  <p>Total Coins: +{autoBattleResults.totalCoins.toFixed(1)}</p>
+                  <p>Total {currentArea === 2 ? 'Space Coins' : 'Coins'}: +{formatNumber(autoBattleResults.totalCoins)}</p>
                 </>
               )}
             </div>

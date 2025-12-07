@@ -1179,12 +1179,10 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  width: 100vw;
-  height: 100vh;
-  margin: 0;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   z-index: 2000;
   animation: fadeIn 0.2s ease;
 }
@@ -1192,8 +1190,13 @@ body {
 .shop-modal {
   display: flex;
   flex-direction: column;
-  width: 100%;
-  height: 100%;
+  width: 90%;
+  max-width: 800px;
+  max-height: 85vh;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 2px solid rgba(255, 128, 0, 0.5);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .shop-close-btn {
@@ -2897,7 +2900,7 @@ body {
 /* Drops History Button */
 .drops-history-btn {
   position: fixed;
-  bottom: 5rem;
+  bottom: 8.5rem;
   left: 1.5rem;
   padding: 0.75rem 1.25rem;
   font-size: 1rem;
@@ -3821,6 +3824,71 @@ body {
   font-size: 1.2rem;
   color: #ffd700;
   font-weight: bold;
+}
+
+/* Critical Hit Button-style notification */
+.critical-hit-btn {
+  position: fixed;
+  top: 10.5rem;
+  left: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, rgba(255, 100, 0, 0.9) 0%, rgba(255, 50, 0, 0.9) 100%);
+  border: 2px solid #ffd700;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: bold;
+  text-shadow: 0 0 5px #ff6600;
+  box-shadow: 0 0 15px rgba(255, 100, 0, 0.5);
+  z-index: 100;
+  animation: criticalBtnPulse 0.5s ease-out;
+}
+
+@keyframes criticalBtnPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Prestige Shop Button */
+.prestige-shop-btn {
+  position: fixed;
+  bottom: 5rem;
+  left: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 165, 0, 0.2) 100%);
+  border: 2px solid rgba(255, 215, 0, 0.6);
+  border-radius: 8px;
+  color: #ffd700;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 100;
+}
+
+.prestige-shop-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.3) 0%, rgba(255, 165, 0, 0.3) 100%);
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+
+/* Prestige Shop Modal - more compact */
+.prestige-shop-modal {
+  max-width: 500px;
+  max-height: fit-content;
+}
+
+.prestige-shop-modal .shop-content {
+  padding: 1.5rem;
 }
 
 /* Bonus Event Banner */

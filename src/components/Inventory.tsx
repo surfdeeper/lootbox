@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { LootItem, Rarity, RARITY_EMOJIS, RARITY_COLORS, SELL_PRICES } from "../types";
 import { LootItemCard } from "./LootItemCard";
 import { ItemDetailModal } from "./ItemDetailModal";
+import { formatNumber } from "../utils/format";
 
 type RarityFilter = "all" | Rarity;
 
@@ -288,7 +289,7 @@ export function Inventory({
                   <span style={{ color: RARITY_COLORS[rarity] }}>
                     {RARITY_EMOJIS[rarity]} {rarity}
                   </span>
-                  <span className="auto-sell-price">+{SELL_PRICES[rarity]} coins</span>
+                  <span className="auto-sell-price">+{formatNumber(SELL_PRICES[rarity])} coins</span>
                 </label>
               ))}
             </div>
@@ -297,7 +298,7 @@ export function Inventory({
 
         {bulkSellMode && (
           <div className="bulk-sell-info">
-            <span>Selected: {selectedForSell.size} items ({getSelectedSellValue()} coins)</span>
+            <span>Selected: {selectedForSell.size} items ({formatNumber(getSelectedSellValue())} coins)</span>
             {selectedForSell.size > 0 && (
               <button className="confirm-bulk-sell-btn" onClick={handleBulkSellClick}>
                 Sell Selected
@@ -388,7 +389,7 @@ export function Inventory({
         <div className="confirm-modal-overlay" onClick={() => setShowBulkSellConfirm(false)}>
           <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Confirm Sell</h3>
-            <p>Sell {selectedForSell.size} items for {getSelectedSellValue()} coins?</p>
+            <p>Sell {selectedForSell.size} items for {formatNumber(getSelectedSellValue())} coins?</p>
             <div className="confirm-modal-buttons">
               <button className="confirm-cancel-btn" onClick={() => setShowBulkSellConfirm(false)}>
                 Cancel
@@ -422,13 +423,13 @@ export function Inventory({
                       {RARITY_EMOJIS[rarity]} {rarity}
                     </span>
                     <span className="sell-all-count">{count} items</span>
-                    <span className="sell-all-value">{value}c</span>
+                    <span className="sell-all-value">{formatNumber(value)}c</span>
                   </label>
                 );
               })}
             </div>
             <div className="sell-all-summary">
-              Total: {getSellAllCount()} items for {getSellAllValue()} coins
+              Total: {getSellAllCount()} items for {formatNumber(getSellAllValue())} coins
             </div>
             <div className="confirm-modal-buttons">
               <button className="confirm-cancel-btn" onClick={() => { setShowSellAllModal(false); setSellAllRarities(new Set()); }}>

@@ -1,5 +1,5 @@
 import { LootItem, RARITY_COLORS, SELL_PRICES } from "../types";
-import { formatStatName } from "../utils/format";
+import { formatStatName, formatNumber } from "../utils/format";
 import { ItemIcon } from "./ItemIcon";
 
 interface ItemDetailModalProps {
@@ -53,7 +53,7 @@ export function ItemDetailModal({ item, onClose, onSell }: ItemDetailModalProps)
           </div>
           {onSell && (
             <button className="sell-item-btn" onClick={onSell}>
-              💰 Sell for {SELL_PRICES[item.rarity]} Coins
+              💰 Sell for {formatNumber(SELL_PRICES[item.rarity])} Coins
             </button>
           )}
         </div>

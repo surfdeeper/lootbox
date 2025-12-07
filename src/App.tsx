@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { generateLoot, generateLootWithGuaranteedRarity } from "./generator";
+import { GALAXY_LOOT_TABLES } from "./loot-tables";
 import { LootItem, RARITY_COLORS, Rarity, ItemCategory, GameSave, SELL_PRICES, XP_REWARDS, COIN_REWARDS } from "./types";
 
 // Utils
@@ -37,9 +38,6 @@ import {
   BOX_RARITY_MODIFIERS,
   REBIRTH_BASE_COST,
   REBIRTH_COST_MULTIPLIER,
-  BATTLE_BASE_COINS,
-  BATTLE_EARLY_WAVE_BONUS_MULTIPLIER,
-  BATTLE_EARLY_WAVE_THRESHOLD,
   BATTLE_STREAK_BONUS_PER_STREAK,
   BATTLE_MAX_STREAK_BONUS,
   BATTLE_STREAK_DROP_INTERVAL,
@@ -62,6 +60,7 @@ import {
 // Components
 import { LootItemCard } from "./components/LootItemCard";
 import { Shop } from "./components/Shop";
+import { PrestigeShop } from "./components/PrestigeShop";
 import { PetsMenu } from "./components/PetsMenu";
 import { BattleMenu } from "./components/BattleMenu";
 import { DropsHistory } from "./components/DropsHistory";
@@ -75,6 +74,7 @@ export default function App() {
   const [chestState, setChestState] = useState<"closed" | "opening" | "open">("closed");
   const [showInventory, setShowInventory] = useState(false);
   const [showShop, setShowShop] = useState(false);
+  const [showPrestigeShop, setShowPrestigeShop] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
@@ -104,6 +104,9 @@ export default function App() {
   const [galaxyRebirthTokens, setGalaxyRebirthTokens] = useState(0);
   const [galaxyRebirthCount, setGalaxyRebirthCount] = useState(0);
   const [galaxyPrestigeCount, setGalaxyPrestigeCount] = useState(0);
+  // Permanent prestige upgrades (survive prestige)
+  const [permanentCoinGen, setPermanentCoinGen] = useState(0);
+  const [galaxyPermanentCoinGen, setGalaxyPermanentCoinGen] = useState(0);
   const [galaxyEggs, setGalaxyEggs] = useState<{ rarity: Rarity; id: string }[]>([]);
   const [galaxyPets, setGalaxyPets] = useState<Pet[]>([]);
   const [galaxyEquippedPets, setGalaxyEquippedPets] = useState<string[]>([]);
@@ -224,11 +227,13 @@ export default function App() {
       setRebirthTokens(save.rebirth?.tokens || 0);
       setRebirthCount(loadedRebirthCount);
       setPrestigeCount(loadedPrestigeCount);
+      setPermanentCoinGen(save.prestige?.permanentCoinGen || 0);
       setCurrentArea(save.area || 1);
       // Load galaxy state
       setGalaxyRebirthTokens(save.galaxyRebirth?.tokens || 0);
       setGalaxyRebirthCount(save.galaxyRebirth?.count || 0);
       setGalaxyPrestigeCount(save.galaxyPrestige?.count || 0);
+      setGalaxyPermanentCoinGen(save.galaxyPrestige?.permanentCoinGen || 0);
       setGalaxyEggs((save.galaxyEggs || []).map(e => ({ ...e, rarity: e.rarity as Rarity })));
       setGalaxyPets((save.galaxyPets || []).map(p => {
         const rarity = p.rarity as Rarity;
@@ -311,6 +316,7 @@ export default function App() {
       battleWave, battleSlots,
       galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount,
       galaxyEggs, galaxyPets, galaxyEquippedPets,
+      permanentCoinGen, galaxyPermanentCoinGen,
       // Galaxy area-specific state
       galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory,
       galaxyCoinGeneratorLevel, galaxyLuckUpgrades,
@@ -319,7 +325,7 @@ export default function App() {
       galaxyBattleWave, galaxyBattleSlots,
     });
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots, galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount, galaxyEggs, galaxyPets, galaxyEquippedPets, galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory, galaxyCoinGeneratorLevel, galaxyLuckUpgrades, galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities, galaxyPurchasedBoxes, galaxyDropsHistory, galaxyEggUpgrades, galaxyBattleWave, galaxyBattleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, isLoaded, purchasedBoxes, usedCheatCode, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots, galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount, galaxyEggs, galaxyPets, galaxyEquippedPets, galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory, galaxyCoinGeneratorLevel, galaxyLuckUpgrades, galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities, galaxyPurchasedBoxes, galaxyDropsHistory, galaxyEggUpgrades, galaxyBattleWave, galaxyBattleSlots, permanentCoinGen, galaxyPermanentCoinGen]);
 
   // Show level-up notification
   const prevLevelRef = useRef<number>(level);
@@ -366,6 +372,19 @@ export default function App() {
     return 1 + rebirthBonus + prestigeBonus + dogBonus + bonusEventMult;
   }, [rebirthCount, prestigeCount, totalDogBonus, bonusEventActive, currentArea, galaxyRebirthCount, galaxyPrestigeCount, totalGalaxyDogBonus]);
 
+  // Calculate coin multiplier without pet bonuses (for challenge tracking)
+  const challengeMultiplier = useMemo(() => {
+    const bonusEventMult = bonusEventActive ? BONUS_EVENT_MULTIPLIER : 0;
+    if (currentArea === 2) {
+      const galaxyRebirthBonus = galaxyRebirthCount * REBIRTH_COIN_BONUS_PER_LEVEL;
+      const galaxyPrestigeBonus = galaxyPrestigeCount * PRESTIGE_COIN_BONUS_PER_LEVEL;
+      return 1 + galaxyRebirthBonus + galaxyPrestigeBonus + bonusEventMult;
+    }
+    const rebirthBonus = rebirthCount * REBIRTH_COIN_BONUS_PER_LEVEL;
+    const prestigeBonus = prestigeCount * PRESTIGE_COIN_BONUS_PER_LEVEL;
+    return 1 + rebirthBonus + prestigeBonus + bonusEventMult;
+  }, [rebirthCount, prestigeCount, bonusEventActive, currentArea, galaxyRebirthCount, galaxyPrestigeCount]);
+
   // Effective state values based on current area
   const effectiveCoins = currentArea === 2 ? galaxyCoins : coins;
   const effectiveXp = currentArea === 2 ? galaxyXp : xp;
@@ -399,18 +418,23 @@ export default function App() {
   const setEffectiveBattleWave: React.Dispatch<React.SetStateAction<number>> = currentArea === 2 ? setGalaxyBattleWave : setBattleWave;
   const setEffectiveBattleSlots: React.Dispatch<React.SetStateAction<(string | null)[]>> = currentArea === 2 ? setGalaxyBattleSlots : setBattleSlots;
 
-  // Generate daily challenges - rewards scale with coin count
+  // Generate daily challenges - targets and rewards scale with coin count
   const generateDailyChallenges = useCallback((currentCoins: number) => {
-    // Scale factor based on coins - rewards are approximately 1-5% of current coins
+    // Scale factor based on coins - targets are 1/10 to 1/15 of current coins
     const baseRewardPercent = 0.02; // 2% of current coins as base
     const minReward = 100;
     const scaledReward = Math.max(minReward, Math.floor(currentCoins * baseRewardPercent));
+
+    // Calculate scaled coin target (1/10 to 1/15 of current coins, min 500)
+    const coinTargetScale = 0.08 + Math.random() * 0.02; // 8-10% (roughly 1/10-1/12)
+    const scaledCoinTarget = Math.max(500, Math.floor(currentCoins * coinTargetScale));
+
     const challengeTemplates = [
       { id: 'open_chests', description: 'Open 50 chests', target: 50, reward: Math.floor(scaledReward * 1.0) },
       { id: 'sell_items', description: 'Sell 20 items', target: 20, reward: Math.floor(scaledReward * 0.5) },
       { id: 'win_battles', description: 'Win 5 battles', target: 5, reward: Math.floor(scaledReward * 1.5) },
       { id: 'find_rares', description: 'Find 10 rare+ items', target: 10, reward: Math.floor(scaledReward * 0.75) },
-      { id: 'earn_coins', description: 'Earn 500 coins', target: 500, reward: Math.floor(scaledReward * 2.0) },
+      { id: 'earn_coins', description: `Earn ${formatNumber(scaledCoinTarget)} coins`, target: scaledCoinTarget, reward: Math.floor(scaledReward * 2.0) },
     ];
     const shuffled = [...challengeTemplates].sort(() => Math.random() - 0.5);
     const selected = shuffled.slice(0, 3);
@@ -424,10 +448,10 @@ export default function App() {
     const lastReset = new Date(lastChallengeReset).toDateString();
 
     if (today !== lastReset && isLoaded) {
-      setDailyChallenges(generateDailyChallenges(coins));
+      setDailyChallenges(generateDailyChallenges(effectiveCoins));
       setLastChallengeReset(now);
     }
-  }, [isLoaded, lastChallengeReset, generateDailyChallenges, coins]);
+  }, [isLoaded, lastChallengeReset, generateDailyChallenges, effectiveCoins]);
 
   // Bonus event timer
   useEffect(() => {
@@ -463,18 +487,22 @@ export default function App() {
     }));
   }, []);
 
+  // Effective permanent coin gen based on current area
+  const effectivePermanentCoinGen = currentArea === 2 ? galaxyPermanentCoinGen : permanentCoinGen;
+
   // Idle coin generation
   useEffect(() => {
-    if (effectiveCoinGeneratorLevel <= 0) return;
+    const permanentCoinsPerSec = effectivePermanentCoinGen * 5; // 5 coins per level
+    if (effectiveCoinGeneratorLevel <= 0 && permanentCoinsPerSec <= 0) return;
 
     const interval = setInterval(() => {
       const baseCoinsPerSecond = effectiveCoinGeneratorLevel * IDLE_COINS_PER_SECOND_PER_LEVEL;
-      const coinsPerSecond = baseCoinsPerSecond * coinMultiplier;
+      const coinsPerSecond = (baseCoinsPerSecond * coinMultiplier) + permanentCoinsPerSec;
       setEffectiveCoins((prev) => safeAddCoins(prev, coinsPerSecond / (1000 / IDLE_TICK_INTERVAL_MS)));
     }, IDLE_TICK_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [effectiveCoinGeneratorLevel, coinMultiplier, setEffectiveCoins]);
+  }, [effectiveCoinGeneratorLevel, coinMultiplier, setEffectiveCoins, effectivePermanentCoinGen]);
 
   // Auto-open chests
   useEffect(() => {
@@ -504,10 +532,19 @@ export default function App() {
 
   // Calculate total cat bonus for legendary drop chance (only equipped pets)
   const totalCatBonus = useMemo(() => {
+    if (currentArea === 2) return 0;
     return pets
       .filter(pet => pet.type === "cat" && equippedPets.includes(pet.id))
       .reduce((sum, pet) => sum + (pet.bonus || 0), 0);
-  }, [pets, equippedPets]);
+  }, [pets, equippedPets, currentArea]);
+
+  // Calculate galaxy cat bonus (only active in area 2)
+  const totalGalaxyCatBonus = useMemo(() => {
+    if (currentArea !== 2) return 0;
+    return galaxyPets
+      .filter(pet => pet.type === "cat" && galaxyEquippedPets.includes(pet.id))
+      .reduce((sum, pet) => sum + (pet.bonus || 0), 0);
+  }, [galaxyPets, galaxyEquippedPets, currentArea]);
 
   const getBoxRarityWeights = useCallback((): Record<Rarity, number> => {
     const baseWeights = calculateRarityWeights(effectiveLuckUpgrades);
@@ -538,8 +575,9 @@ export default function App() {
       };
     }
 
-    if (totalCatBonus > 0) {
-      const legendaryBoost = totalCatBonus / PET_BONUS_DIVISOR * weights[Rarity.Legendary];
+    const effectiveCatBonus = currentArea === 2 ? totalGalaxyCatBonus : totalCatBonus;
+    if (effectiveCatBonus > 0) {
+      const legendaryBoost = effectiveCatBonus / PET_BONUS_DIVISOR * weights[Rarity.Legendary];
       weights = {
         ...weights,
         [Rarity.Legendary]: weights[Rarity.Legendary] + legendaryBoost,
@@ -547,7 +585,7 @@ export default function App() {
     }
 
     return weights;
-  }, [effectiveLuckUpgrades, effectivePurchasedBoxes, totalCatBonus]);
+  }, [effectiveLuckUpgrades, effectivePurchasedBoxes, totalCatBonus, totalGalaxyCatBonus, currentArea]);
 
   const openChest = (isManual: boolean = false) => {
     if (isOpening) return;
@@ -569,7 +607,8 @@ export default function App() {
       }
 
       const customWeights = getBoxRarityWeights();
-      const newLoot = generateLoot(undefined, customWeights);
+      const lootTable = currentArea === 2 ? GALAXY_LOOT_TABLES : undefined;
+      const newLoot = generateLoot(lootTable, customWeights);
       setLoot(newLoot);
 
       const shouldAutoSell = effectiveHasAutoSell && effectiveAutoSellRarities.has(newLoot.rarity);
@@ -591,6 +630,7 @@ export default function App() {
       const baseCoins = COIN_REWARDS[newLoot.rarity] + levelUpCoins + autoSellBonus;
       const criticalMultiplier = isCritical ? CRITICAL_HIT_MULTIPLIER : 1;
       const earnedCoins = baseCoins * coinMultiplier * criticalMultiplier;
+      const challengeCoins = baseCoins * challengeMultiplier * criticalMultiplier; // Exclude pet bonuses
       setEffectiveCoins((prev) => safeAddCoins(prev, earnedCoins));
 
       setStats((prev) => ({
@@ -600,7 +640,7 @@ export default function App() {
       }));
 
       updateChallengeProgress('open_chests', 1);
-      updateChallengeProgress('earn_coins', earnedCoins);
+      updateChallengeProgress('earn_coins', challengeCoins);
       if ([Rarity.Rare, Rarity.Epic, Rarity.Legendary].includes(newLoot.rarity)) {
         updateChallengeProgress('find_rares', 1);
       }
@@ -655,24 +695,26 @@ export default function App() {
     if (!item) return;
 
     const sellValue = SELL_PRICES[item.rarity] * coinMultiplier;
+    const challengeSellValue = SELL_PRICES[item.rarity] * challengeMultiplier; // Exclude pet bonuses
     setEffectiveCoins(prev => prev + sellValue);
     setEffectiveInventory(prev => prev.filter(i => i.id !== itemId));
     updateChallengeProgress('sell_items', 1);
-    updateChallengeProgress('earn_coins', sellValue);
-  }, [effectiveInventory, coinMultiplier, updateChallengeProgress, setEffectiveCoins, setEffectiveInventory]);
+    updateChallengeProgress('earn_coins', challengeSellValue);
+  }, [effectiveInventory, coinMultiplier, challengeMultiplier, updateChallengeProgress, setEffectiveCoins, setEffectiveInventory]);
 
   const handleBulkSell = useCallback((itemIds: string[]) => {
     const itemsToSell = effectiveInventory.filter(i => itemIds.includes(i.id));
     const baseValue = itemsToSell.reduce((total, item) => total + SELL_PRICES[item.rarity], 0);
     const totalValue = baseValue * coinMultiplier;
+    const challengeTotalValue = baseValue * challengeMultiplier; // Exclude pet bonuses
 
     setEffectiveCoins(prev => prev + totalValue);
     setEffectiveInventory(prev => prev.filter(i => !itemIds.includes(i.id)));
     updateChallengeProgress('sell_items', itemsToSell.length);
-    updateChallengeProgress('earn_coins', totalValue);
+    updateChallengeProgress('earn_coins', challengeTotalValue);
 
     return totalValue;
-  }, [effectiveInventory, coinMultiplier, updateChallengeProgress, setEffectiveCoins, setEffectiveInventory]);
+  }, [effectiveInventory, coinMultiplier, challengeMultiplier, updateChallengeProgress, setEffectiveCoins, setEffectiveInventory]);
 
   const handleMergeItems = useCallback((itemIds: string[]): LootItem | null => {
     if (itemIds.length !== 3) return null;
@@ -689,14 +731,15 @@ export default function App() {
     const currentIndex = rarityOrder.indexOf(rarity);
     const nextRarity = rarityOrder[currentIndex + 1];
 
-    const newItem = generateLootWithGuaranteedRarity(nextRarity);
+    const lootTable = currentArea === 2 ? GALAXY_LOOT_TABLES : undefined;
+    const newItem = generateLootWithGuaranteedRarity(nextRarity, lootTable);
     if (!newItem) return null;
 
     setEffectiveInventory(prev => [...prev.filter(i => !itemIds.includes(i.id)), newItem]);
     setEffectiveDropsHistory(prev => [newItem, ...prev].slice(0, 1000));
 
     return newItem;
-  }, [effectiveInventory, setEffectiveInventory, setEffectiveDropsHistory]);
+  }, [effectiveInventory, setEffectiveInventory, setEffectiveDropsHistory, currentArea]);
 
   const playChestOpenSound = (rarity: Rarity) => {
     const frequencies: Record<Rarity, number> = {
@@ -752,6 +795,7 @@ export default function App() {
       battleWave, battleSlots,
       galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount,
       galaxyEggs, galaxyPets, galaxyEquippedPets,
+      permanentCoinGen, galaxyPermanentCoinGen,
       galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory,
       galaxyCoinGeneratorLevel, galaxyLuckUpgrades,
       galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities,
@@ -759,7 +803,7 @@ export default function App() {
       galaxyBattleWave, galaxyBattleSlots,
     });
     saveGame(save);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots, galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount, galaxyEggs, galaxyPets, galaxyEquippedPets, galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory, galaxyCoinGeneratorLevel, galaxyLuckUpgrades, galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities, galaxyPurchasedBoxes, galaxyDropsHistory, galaxyEggUpgrades, galaxyBattleWave, galaxyBattleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots, galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount, galaxyEggs, galaxyPets, galaxyEquippedPets, galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory, galaxyCoinGeneratorLevel, galaxyLuckUpgrades, galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities, galaxyPurchasedBoxes, galaxyDropsHistory, galaxyEggUpgrades, galaxyBattleWave, galaxyBattleSlots, permanentCoinGen, galaxyPermanentCoinGen]);
 
   const exportSave = useCallback(() => {
     const save = createGameSave({
@@ -770,6 +814,7 @@ export default function App() {
       battleWave, battleSlots,
       galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount,
       galaxyEggs, galaxyPets, galaxyEquippedPets,
+      permanentCoinGen, galaxyPermanentCoinGen,
       galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory,
       galaxyCoinGeneratorLevel, galaxyLuckUpgrades,
       galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities,
@@ -785,7 +830,7 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots, galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount, galaxyEggs, galaxyPets, galaxyEquippedPets, galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory, galaxyCoinGeneratorLevel, galaxyLuckUpgrades, galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities, galaxyPurchasedBoxes, galaxyDropsHistory, galaxyEggUpgrades, galaxyBattleWave, galaxyBattleSlots]);
+  }, [level, xp, coins, inventory, coinGeneratorLevel, luckUpgrades, stats, purchasedBoxes, hasAutoOpen, hasAutoSell, autoSellRarities, hasPets, rebirthTokens, rebirthCount, prestigeCount, currentArea, eggUpgrades, eggs, pets, equippedPets, dropsHistory, battleWave, battleSlots, galaxyRebirthTokens, galaxyRebirthCount, galaxyPrestigeCount, galaxyEggs, galaxyPets, galaxyEquippedPets, galaxyCoins, galaxyXp, galaxyLevel, galaxyInventory, galaxyCoinGeneratorLevel, galaxyLuckUpgrades, galaxyHasAutoOpen, galaxyHasAutoSell, galaxyAutoSellRarities, galaxyPurchasedBoxes, galaxyDropsHistory, galaxyEggUpgrades, galaxyBattleWave, galaxyBattleSlots, permanentCoinGen, galaxyPermanentCoinGen]);
 
   const importSave = useCallback((data: string): boolean => {
     try {
@@ -1075,7 +1120,11 @@ export default function App() {
         setGalaxyBattleSlots([null, null, null, null, null]);
         setBattleStreak(0);
         battleStreakRef.current = 0;
+        // Reset galaxy pets and eggs on prestige
+        setGalaxyPets([]);
+        setGalaxyEggs([]);
         setGalaxyEquippedPets([]);
+        setShowPets(false); // Close pet menu
         setGalaxyPrestigeCount(prev => prev + 1);
       }
     } else {
@@ -1101,7 +1150,11 @@ export default function App() {
         setBattleSlots([null, null, null, null, null]);
         setBattleStreak(0);
         battleStreakRef.current = 0;
+        // Reset pets and eggs on prestige
+        setPets([]);
+        setEggs([]);
         setEquippedPets([]);
+        setShowPets(false); // Close pet menu
         setPrestigeCount(prev => prev + 1);
       }
     }
@@ -1166,25 +1219,22 @@ export default function App() {
     const won = wins >= 3;
 
     if (won) {
-      let baseCoins = BATTLE_BASE_COINS + currentWave;
-
-      if (currentWave <= BATTLE_EARLY_WAVE_THRESHOLD) {
-        const earlyWaveBonus = (BATTLE_EARLY_WAVE_THRESHOLD + 1 - currentWave) * BATTLE_EARLY_WAVE_BONUS_MULTIPLIER;
-        baseCoins += earlyWaveBonus;
-      }
+      // 5 coins per wave completed
+      const baseCoins = 5;
 
       const newStreak = battleStreakRef.current + 1;
       battleStreakRef.current = newStreak;
       const streakBonus = Math.min(newStreak * BATTLE_STREAK_BONUS_PER_STREAK, BATTLE_MAX_STREAK_BONUS);
 
       const earnedCoins = baseCoins * coinMultiplier * (1 + streakBonus);
+      const challengeCoins = baseCoins * challengeMultiplier * (1 + streakBonus); // Exclude pet bonuses
       setEffectiveCoins(prev => safeAddCoins(prev, earnedCoins));
       effectiveBattleWaveRef.current = currentWave + 1;
       setEffectiveBattleWave(currentWave + 1);
       setBattleStreak(newStreak);
 
       updateChallengeProgress('win_battles', 1);
-      updateChallengeProgress('earn_coins', earnedCoins);
+      updateChallengeProgress('earn_coins', challengeCoins);
 
       if (newStreak > 0 && newStreak % BATTLE_STREAK_DROP_INTERVAL === 0) {
         let streakDropRarity: Rarity;
@@ -1195,7 +1245,8 @@ export default function App() {
         } else {
           streakDropRarity = Rarity.Rare;
         }
-        const streakDrop = generateLootWithGuaranteedRarity(streakDropRarity);
+        const battleLootTable = currentArea === 2 ? GALAXY_LOOT_TABLES : undefined;
+        const streakDrop = generateLootWithGuaranteedRarity(streakDropRarity, battleLootTable);
         if (streakDrop) {
           setEffectiveInventory(prev => [...prev, streakDrop]);
           setEffectiveDropsHistory(prev => [streakDrop, ...prev].slice(0, MAX_DROPS_HISTORY));
@@ -1214,7 +1265,8 @@ export default function App() {
           dropRarity = Rarity.Rare;
         }
 
-        const battleDrop = generateLootWithGuaranteedRarity(dropRarity);
+        const battleDropLootTable = currentArea === 2 ? GALAXY_LOOT_TABLES : undefined;
+        const battleDrop = generateLootWithGuaranteedRarity(dropRarity, battleDropLootTable);
         if (battleDrop) {
           setEffectiveInventory(prev => [...prev, battleDrop]);
           setEffectiveDropsHistory(prev => [battleDrop, ...prev].slice(0, MAX_DROPS_HISTORY));
@@ -1230,7 +1282,7 @@ export default function App() {
     }
 
     return { won, results, streak: 0 };
-  }, [effectiveBattleSlots, effectiveInventory, coinMultiplier, updateChallengeProgress, effectiveBattleWaveRef, setEffectiveCoins, setEffectiveBattleWave, setEffectiveInventory, setEffectiveDropsHistory]);
+  }, [effectiveBattleSlots, effectiveInventory, coinMultiplier, challengeMultiplier, updateChallengeProgress, effectiveBattleWaveRef, setEffectiveCoins, setEffectiveBattleWave, setEffectiveInventory, setEffectiveDropsHistory, currentArea]);
 
   const getChestEmoji = () => {
     if (currentArea === 2) {
@@ -1261,7 +1313,7 @@ export default function App() {
   return (
     <div className={`app ${currentArea === 2 ? 'area-galaxy' : ''}`}>
       <div className="version-tracker">vs: 1.01</div>
-      <XPBar xp={effectiveXp} level={effectiveLevel} coins={effectiveCoins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={effectiveCoinGeneratorLevel} onManualSave={manualSave} onExportSave={exportSave} onImportSave={importSave} rebirthCount={rebirthCount} stats={stats} totalDogBonus={totalDogBonus} totalCatBonus={totalCatBonus} prestigeCount={prestigeCount} currentArea={currentArea} galaxyRebirthTokens={galaxyRebirthTokens} galaxyRebirthCount={galaxyRebirthCount} galaxyPrestigeCount={galaxyPrestigeCount} totalGalaxyDogBonus={totalGalaxyDogBonus} />
+      <XPBar xp={effectiveXp} level={effectiveLevel} coins={effectiveCoins} rebirthTokens={rebirthTokens} showSettings={showSettings} onToggleSettings={() => setShowSettings(!showSettings)} coinGeneratorLevel={effectiveCoinGeneratorLevel} onManualSave={manualSave} onExportSave={exportSave} onImportSave={importSave} rebirthCount={rebirthCount} stats={stats} totalDogBonus={totalDogBonus} totalCatBonus={totalCatBonus} prestigeCount={prestigeCount} currentArea={currentArea} galaxyRebirthTokens={galaxyRebirthTokens} galaxyRebirthCount={galaxyRebirthCount} galaxyPrestigeCount={galaxyPrestigeCount} totalGalaxyDogBonus={totalGalaxyDogBonus} totalGalaxyCatBonus={totalGalaxyCatBonus} />
 
       {effectiveHasAutoOpen && (
         <div className="auto-open-bar-container">
@@ -1311,6 +1363,12 @@ export default function App() {
         </button>
       </div>
 
+      {criticalHit && (
+        <div className="critical-hit-btn">
+          💥 CRITICAL HIT! 2x
+        </div>
+      )}
+
       {dailyChallenges.length > 0 && (
         <button className="challenges-btn" onClick={() => setShowChallenges(true)}>
           <span className="challenges-btn-icon">📋</span>
@@ -1341,17 +1399,12 @@ export default function App() {
         </div>
       )}
 
-      {criticalHit && (
-        <div className="critical-hit-notification">
-          <div className="critical-hit-content">
-            <span className="critical-hit-text">CRITICAL HIT!</span>
-            <span className="critical-hit-bonus">2x Rewards!</span>
-          </div>
-        </div>
-      )}
-
       <button className="drops-history-btn" onClick={() => setShowDropsHistory(true)}>
         📜 Drops ({effectiveDropsHistory.length})
+      </button>
+
+      <button className="prestige-shop-btn" onClick={() => setShowPrestigeShop(true)}>
+        {currentArea === 2 ? "🌟" : "⭐"} Prestige Shop
       </button>
 
       <button className="shop-btn" onClick={() => setShowShop(true)}>
@@ -1485,6 +1538,28 @@ export default function App() {
               setEffectiveEggUpgrades((prev) => ({ ...prev, [rarity]: true }));
             }
           }}
+          currentArea={currentArea}
+        />
+      )}
+
+      {showPrestigeShop && (
+        <PrestigeShop
+          onClose={() => setShowPrestigeShop(false)}
+          prestigeCount={currentArea === 2 ? galaxyPrestigeCount : prestigeCount}
+          permanentCoinGen={effectivePermanentCoinGen}
+          onBuyPermanentCoinGen={() => {
+            const effectivePrestigeCount = currentArea === 2 ? galaxyPrestigeCount : prestigeCount;
+            if (effectivePrestigeCount >= 1) {
+              if (currentArea === 2) {
+                setGalaxyPrestigeCount((prev) => prev - 1);
+                setGalaxyPermanentCoinGen((prev) => prev + 1);
+              } else {
+                setPrestigeCount((prev) => prev - 1);
+                setPermanentCoinGen((prev) => prev + 1);
+              }
+            }
+          }}
+          currentArea={currentArea}
         />
       )}
 
@@ -1528,6 +1603,7 @@ export default function App() {
           streak={battleStreak}
           rebirthCount={rebirthCount}
           onBattle={handleBattle}
+          currentArea={currentArea}
         />
       )}
 
@@ -1553,7 +1629,7 @@ export default function App() {
                   <div className="challenge-modal-stats">
                     <span className="challenge-modal-count">{c.progress}/{c.target}</span>
                     <span className="challenge-modal-reward">
-                      {c.completed ? '✓' : `🪙 ${c.reward}`}
+                      {c.completed ? '✓' : `🪙 ${formatNumber(c.reward)}`}
                     </span>
                   </div>
                 </div>
@@ -1580,7 +1656,7 @@ export default function App() {
             <h2>Welcome Back!</h2>
             <p>While you were away, your coin generators earned:</p>
             <div className="offline-earnings-amount">
-              💰 +{offlineEarnings.toFixed(2)} Coins
+              💰 +{formatNumber(offlineEarnings)} Coins
             </div>
             <button className="offline-earnings-btn" onClick={() => setOfflineEarnings(null)}>
               Collect

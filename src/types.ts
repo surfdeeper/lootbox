@@ -192,6 +192,7 @@ export interface GameSave {
 
   prestige?: {
     count: number; // Number of prestiges - each gives 100% permanent bonus
+    permanentCoinGen?: number; // Permanent +5 coins/sec per level (survives prestige)
   };
 
   galaxyRebirth?: {
@@ -201,6 +202,7 @@ export interface GameSave {
 
   galaxyPrestige?: {
     count: number;
+    permanentCoinGen?: number; // Permanent +5 space coins/sec per level (survives galaxy prestige)
   };
 
   area?: number; // Current area (1 = default, 2 = galaxy, etc.)

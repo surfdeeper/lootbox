@@ -23,6 +23,7 @@ interface XPBarProps {
   galaxyRebirthCount: number;
   galaxyPrestigeCount: number;
   totalGalaxyDogBonus: number;
+  totalGalaxyCatBonus: number;
 }
 
 export function XPBar({
@@ -46,6 +47,7 @@ export function XPBar({
   galaxyRebirthCount,
   galaxyPrestigeCount,
   totalGalaxyDogBonus,
+  totalGalaxyCatBonus,
 }: XPBarProps) {
   const xpForNextLevel = level * 100;
   const progress = (xp / xpForNextLevel) * 100;
@@ -176,7 +178,7 @@ export function XPBar({
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Total Coins Earned</span>
-                  <span className="stat-value">{stats.totalCoinsEarned.toFixed(2)}</span>
+                  <span className="stat-value">{formatNumber(stats.totalCoinsEarned)}</span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">Legendaries Found</span>
@@ -219,7 +221,7 @@ export function XPBar({
         )
       ) : (
         // Area 2: Show galaxy bonuses only
-        (galaxyRebirthCount > 0 || galaxyPrestigeCount > 0 || totalGalaxyDogBonus > 0) && (
+        (galaxyRebirthCount > 0 || galaxyPrestigeCount > 0 || totalGalaxyDogBonus > 0 || totalGalaxyCatBonus > 0) && (
           <div className="bonuses-display">
             {galaxyPrestigeCount > 0 && (
               <span className="prestige-bonus-text">+{galaxyPrestigeCount * 100}% Galaxy Prestige</span>
@@ -229,6 +231,9 @@ export function XPBar({
             )}
             {totalGalaxyDogBonus > 0 && (
               <span className="dog-bonus-text">+{totalGalaxyDogBonus}% Galaxy Coins</span>
+            )}
+            {totalGalaxyCatBonus > 0 && (
+              <span className="cat-bonus-text">+{totalGalaxyCatBonus}% Galaxy Legendary</span>
             )}
           </div>
         )

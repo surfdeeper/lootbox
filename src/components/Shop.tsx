@@ -37,6 +37,7 @@ interface ShopProps {
   rebirthTokens: number;
   eggUpgrades: EggUpgrades;
   onBuyEggUpgrade: (rarity: keyof EggUpgrades) => void;
+  currentArea: number;
 }
 
 export function Shop({
@@ -57,6 +58,7 @@ export function Shop({
   rebirthTokens,
   eggUpgrades,
   onBuyEggUpgrade,
+  currentArea,
 }: ShopProps) {
   const [activeSection, setActiveSection] = useState<ShopSection>("idle");
 
@@ -311,7 +313,7 @@ export function Shop({
     <div className="shop-overlay">
       <div className="shop-modal">
         <div className="shop-header">
-          <span className="shop-coins">💰 {formatNumber(coins)} Coins</span>
+          <span className="shop-coins">{currentArea === 2 ? '🪐' : '💰'} {formatNumber(coins)} {currentArea === 2 ? 'Space Coins' : 'Coins'}</span>
           <button className="shop-close-btn" onClick={onClose}>
             ✕
           </button>

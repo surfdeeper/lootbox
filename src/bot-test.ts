@@ -44,6 +44,7 @@ interface BotGameState {
   hasPets: boolean;
   rebirthTokens: number;
   rebirthCount: number;
+  prestigeCount: number;
   eggUpgrades: {
     common: boolean;
     uncommon: boolean;
@@ -52,11 +53,44 @@ interface BotGameState {
     legendary: boolean;
   };
   eggs: { rarity: Rarity; id: string }[];
-  pets: { id: string; name: string; type: "dog" | "cat"; rarity: Rarity }[];
+  pets: { id: string; name: string; type: "dog" | "cat"; rarity: Rarity; bonus: number }[];
+  equippedPets: string[];
   dropsHistory: LootItem[];
   battleWave: number;
   battleSlots: (string | null)[];
   battleStreak: number;
+  // Galaxy state (Area 2)
+  currentArea: number;
+  galaxyCoins: number;
+  galaxyXp: number;
+  galaxyLevel: number;
+  galaxyInventory: LootItem[];
+  galaxyCoinGeneratorLevel: number;
+  galaxyLuckUpgrades: {
+    luckUpgrade1: number;
+    luckUpgrade2: number;
+    luckUpgrade3: number;
+  };
+  galaxyPurchasedBoxes: string[];
+  galaxyHasAutoOpen: boolean;
+  galaxyHasAutoSell: boolean;
+  galaxyAutoSellRarities: Set<Rarity>;
+  galaxyEggUpgrades: {
+    common: boolean;
+    uncommon: boolean;
+    rare: boolean;
+    epic: boolean;
+    legendary: boolean;
+  };
+  galaxyEggs: { rarity: Rarity; id: string }[];
+  galaxyPets: { id: string; name: string; type: "dog" | "cat"; rarity: Rarity; bonus: number }[];
+  galaxyEquippedPets: string[];
+  galaxyDropsHistory: LootItem[];
+  galaxyBattleWave: number;
+  galaxyBattleSlots: (string | null)[];
+  galaxyRebirthTokens: number;
+  galaxyRebirthCount: number;
+  galaxyPrestigeCount: number;
 }
 
 interface BugReport {
@@ -498,6 +532,7 @@ function createInitialState(): BotGameState {
     hasPets: false,
     rebirthTokens: 0,
     rebirthCount: 0,
+    prestigeCount: 0,
     eggUpgrades: {
       common: false,
       uncommon: false,
@@ -507,11 +542,55 @@ function createInitialState(): BotGameState {
     },
     eggs: [],
     pets: [],
+    equippedPets: [],
     dropsHistory: [],
     battleWave: 1,
     battleSlots: [null, null, null, null, null],
     battleStreak: 0,
+    // Galaxy state
+    currentArea: 1,
+    galaxyCoins: 0,
+    galaxyXp: 0,
+    galaxyLevel: 1,
+    galaxyInventory: [],
+    galaxyCoinGeneratorLevel: 0,
+    galaxyLuckUpgrades: {
+      luckUpgrade1: 0,
+      luckUpgrade2: 0,
+      luckUpgrade3: 0,
+    },
+    galaxyPurchasedBoxes: [],
+    galaxyHasAutoOpen: false,
+    galaxyHasAutoSell: false,
+    galaxyAutoSellRarities: new Set(),
+    galaxyEggUpgrades: {
+      common: false,
+      uncommon: false,
+      rare: false,
+      epic: false,
+      legendary: false,
+    },
+    galaxyEggs: [],
+    galaxyPets: [],
+    galaxyEquippedPets: [],
+    galaxyDropsHistory: [],
+    galaxyBattleWave: 1,
+    galaxyBattleSlots: [null, null, null, null, null],
+    galaxyRebirthTokens: 0,
+    galaxyRebirthCount: 0,
+    galaxyPrestigeCount: 0,
   };
+}
+
+function generatePetBonus(type: "dog" | "cat", rarity: Rarity): number {
+  const baseBonus: Record<Rarity, number> = {
+    [Rarity.Common]: type === "dog" ? 1 : 0.5,
+    [Rarity.Uncommon]: type === "dog" ? 3 : 1.5,
+    [Rarity.Rare]: type === "dog" ? 8 : 4,
+    [Rarity.Epic]: type === "dog" ? 20 : 10,
+    [Rarity.Legendary]: type === "dog" ? 50 : 25,
+  };
+  return baseBonus[rarity];
 }
 
 function getBoxRarityWeights(state: BotGameState): Record<Rarity, number> {
@@ -545,35 +624,92 @@ function getBoxRarityWeights(state: BotGameState): Record<Rarity, number> {
 type BotAction = (state: BotGameState) => { state: BotGameState; actionName: string };
 
 const botActions: BotAction[] = [
-  // Open chest
+  // Open chest (area-aware)
   (state) => {
-    const customWeights = getBoxRarityWeights(state);
-    const newLoot = generateLoot(undefined, customWeights);
+    const isGalaxy = state.currentArea === 2;
+    const luckUpgrades = isGalaxy ? state.galaxyLuckUpgrades : state.luckUpgrades;
+    const purchasedBoxes = isGalaxy ? state.galaxyPurchasedBoxes : state.purchasedBoxes;
+    const hasAutoSell = isGalaxy ? state.galaxyHasAutoSell : state.hasAutoSell;
+    const autoSellRarities = isGalaxy ? state.galaxyAutoSellRarities : state.autoSellRarities;
+    const eggUpgrades = isGalaxy ? state.galaxyEggUpgrades : state.eggUpgrades;
+    const rebirthCount = isGalaxy ? state.galaxyRebirthCount : state.rebirthCount;
+    const prestigeCount = isGalaxy ? state.galaxyPrestigeCount : state.prestigeCount;
+    const currentXp = isGalaxy ? state.galaxyXp : state.xp;
+    const currentLevel = isGalaxy ? state.galaxyLevel : state.level;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
 
-    const shouldAutoSell =
-      state.hasAutoSell && state.autoSellRarities.has(newLoot.rarity);
+    // Calculate weights based on current area's luck upgrades
+    const baseWeights = calculateRarityWeights(luckUpgrades);
+    let customWeights = { ...baseWeights };
+    if (purchasedBoxes.includes("gold")) {
+      customWeights = {
+        ...customWeights,
+        [Rarity.Common]: Math.max(0, customWeights[Rarity.Common] - 20),
+        [Rarity.Epic]: customWeights[Rarity.Epic] + 15,
+        [Rarity.Legendary]: customWeights[Rarity.Legendary] + 5,
+      };
+    } else if (purchasedBoxes.includes("silver")) {
+      customWeights = {
+        ...customWeights,
+        [Rarity.Common]: Math.max(0, customWeights[Rarity.Common] - 15),
+        [Rarity.Uncommon]: customWeights[Rarity.Uncommon] + 5,
+        [Rarity.Rare]: customWeights[Rarity.Rare] + 10,
+      };
+    } else if (purchasedBoxes.includes("bronze")) {
+      customWeights = {
+        ...customWeights,
+        [Rarity.Common]: Math.max(0, customWeights[Rarity.Common] - 8),
+        [Rarity.Uncommon]: customWeights[Rarity.Uncommon] + 8,
+      };
+    }
+
+    const newLoot = generateLoot(undefined, customWeights);
+    const shouldAutoSell = hasAutoSell && autoSellRarities.has(newLoot.rarity);
 
     const newState = { ...state };
 
+    // Update inventory for correct area
     if (!shouldAutoSell) {
-      newState.inventory = [...state.inventory, newLoot];
+      if (isGalaxy) {
+        newState.galaxyInventory = [...state.galaxyInventory, newLoot];
+      } else {
+        newState.inventory = [...state.inventory, newLoot];
+      }
     }
 
-    newState.dropsHistory = [newLoot, ...state.dropsHistory];
+    // Update drops history for correct area
+    if (isGalaxy) {
+      newState.galaxyDropsHistory = [newLoot, ...state.galaxyDropsHistory];
+    } else {
+      newState.dropsHistory = [newLoot, ...state.dropsHistory];
+    }
 
+    // Calculate XP and level for correct area
     const { xp: newXp, level: newLevel, coinReward: levelUpCoins } = addXp(
-      state.xp,
-      state.level,
+      currentXp,
+      currentLevel,
       XP_REWARDS[newLoot.rarity]
     );
-    newState.xp = newXp;
-    newState.level = newLevel;
+    if (isGalaxy) {
+      newState.galaxyXp = newXp;
+      newState.galaxyLevel = newLevel;
+    } else {
+      newState.xp = newXp;
+      newState.level = newLevel;
+    }
 
+    // Calculate coins with area-specific bonuses
     const autoSellBonus = shouldAutoSell ? SELL_PRICES[newLoot.rarity] : 0;
     const baseCoins = COIN_REWARDS[newLoot.rarity] + levelUpCoins + autoSellBonus;
-    const rebirthBonus = state.rebirthCount * 0.1;
-    const earnedCoins = baseCoins * (1 + rebirthBonus);
-    newState.coins = state.coins + earnedCoins;
+    const rebirthBonus = rebirthCount * 0.1;
+    const prestigeBonus = prestigeCount * 1.0;
+    const earnedCoins = baseCoins * (1 + rebirthBonus + prestigeBonus);
+
+    if (isGalaxy) {
+      newState.galaxyCoins = currentCoins + earnedCoins;
+    } else {
+      newState.coins = currentCoins + earnedCoins;
+    }
 
     newState.stats = {
       totalChestsOpened: state.stats.totalChestsOpened + 1,
@@ -583,9 +719,9 @@ const botActions: BotAction[] = [
         (newLoot.rarity === Rarity.Legendary ? 1 : 0),
     };
 
-    // Egg drops
+    // Egg drops for correct area
     const eggChance = 0.1;
-    const rarityToCheck: (keyof typeof state.eggUpgrades)[] = [
+    const rarityToCheck: (keyof typeof eggUpgrades)[] = [
       "common",
       "uncommon",
       "rare",
@@ -593,12 +729,16 @@ const botActions: BotAction[] = [
       "legendary",
     ];
     for (const rarity of rarityToCheck) {
-      if (state.eggUpgrades[rarity] && Math.random() < eggChance) {
+      if (eggUpgrades[rarity] && Math.random() < eggChance) {
         const newEgg = {
           rarity: rarity as Rarity,
           id: `egg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         };
-        newState.eggs = [...state.eggs, newEgg];
+        if (isGalaxy) {
+          newState.galaxyEggs = [...state.galaxyEggs, newEgg];
+        } else {
+          newState.eggs = [...state.eggs, newEgg];
+        }
         break;
       }
     }
@@ -606,23 +746,38 @@ const botActions: BotAction[] = [
     return { state: newState, actionName: "openChest" };
   },
 
-  // Sell random item
+  // Sell random item (area-aware)
   (state) => {
-    if (state.inventory.length === 0) {
+    const isGalaxy = state.currentArea === 2;
+    const inventory = isGalaxy ? state.galaxyInventory : state.inventory;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const battleSlots = isGalaxy ? state.galaxyBattleSlots : state.battleSlots;
+
+    if (inventory.length === 0) {
       return { state, actionName: "sellItem_skipped_empty" };
     }
 
-    const randomIndex = Math.floor(Math.random() * state.inventory.length);
-    const item = state.inventory[randomIndex];
+    const randomIndex = Math.floor(Math.random() * inventory.length);
+    const item = inventory[randomIndex];
 
     // Check if item is in battle slots - remove from slots first
-    const newBattleSlots = state.battleSlots.map((slotId) =>
+    const newBattleSlots = battleSlots.map((slotId) =>
       slotId === item.id ? null : slotId
     );
 
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins + SELL_PRICES[item.rarity],
+        galaxyInventory: state.galaxyInventory.filter((_, i) => i !== randomIndex),
+        galaxyBattleSlots: newBattleSlots,
+      };
+      return { state: newState, actionName: "sellItem" };
+    }
+
     const newState = {
       ...state,
-      coins: state.coins + SELL_PRICES[item.rarity],
+      coins: currentCoins + SELL_PRICES[item.rarity],
       inventory: state.inventory.filter((_, i) => i !== randomIndex),
       battleSlots: newBattleSlots,
     };
@@ -630,140 +785,239 @@ const botActions: BotAction[] = [
     return { state: newState, actionName: "sellItem" };
   },
 
-  // Upgrade coin generator
+  // Upgrade coin generator (area-aware)
   (state) => {
-    const cost = getIdleUpgradeCost(state.coinGeneratorLevel);
-    if (state.coins < cost) {
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const currentLevel = isGalaxy ? state.galaxyCoinGeneratorLevel : state.coinGeneratorLevel;
+
+    const cost = getIdleUpgradeCost(currentLevel);
+    if (currentCoins < cost) {
       return { state, actionName: "upgradeCoinGen_skipped_insufficient" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - cost,
+        galaxyCoinGeneratorLevel: currentLevel + 1,
+      };
+      return { state: newState, actionName: "upgradeCoinGenerator" };
     }
 
     const newState = {
       ...state,
-      coins: state.coins - cost,
-      coinGeneratorLevel: state.coinGeneratorLevel + 1,
+      coins: currentCoins - cost,
+      coinGeneratorLevel: currentLevel + 1,
     };
 
     return { state: newState, actionName: "upgradeCoinGenerator" };
   },
 
-  // Upgrade luck 1
+  // Upgrade luck 1 (area-aware)
   (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const currentLuckUpgrades = isGalaxy ? state.galaxyLuckUpgrades : state.luckUpgrades;
+
     const MAX_LUCK_LEVEL = 4;
-    if (state.luckUpgrades.luckUpgrade1 >= MAX_LUCK_LEVEL) {
+    if (currentLuckUpgrades.luckUpgrade1 >= MAX_LUCK_LEVEL) {
       return { state, actionName: "upgradeLuck1_skipped_max" };
     }
 
-    const cost = getLuckUpgradeCost(4, state.luckUpgrades.luckUpgrade1);
-    if (state.coins < cost) {
+    const cost = getLuckUpgradeCost(4, currentLuckUpgrades.luckUpgrade1);
+    if (currentCoins < cost) {
       return { state, actionName: "upgradeLuck1_skipped_insufficient" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - cost,
+        galaxyLuckUpgrades: {
+          ...state.galaxyLuckUpgrades,
+          luckUpgrade1: currentLuckUpgrades.luckUpgrade1 + 1,
+        },
+      };
+      return { state: newState, actionName: "upgradeLuck1" };
     }
 
     const newState = {
       ...state,
-      coins: state.coins - cost,
+      coins: currentCoins - cost,
       luckUpgrades: {
         ...state.luckUpgrades,
-        luckUpgrade1: state.luckUpgrades.luckUpgrade1 + 1,
+        luckUpgrade1: currentLuckUpgrades.luckUpgrade1 + 1,
       },
     };
 
     return { state: newState, actionName: "upgradeLuck1" };
   },
 
-  // Upgrade luck 2
+  // Upgrade luck 2 (area-aware)
   (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const currentLuckUpgrades = isGalaxy ? state.galaxyLuckUpgrades : state.luckUpgrades;
+
     const MAX_LUCK_LEVEL = 4;
-    if (state.luckUpgrades.luckUpgrade2 >= MAX_LUCK_LEVEL) {
+    if (currentLuckUpgrades.luckUpgrade2 >= MAX_LUCK_LEVEL) {
       return { state, actionName: "upgradeLuck2_skipped_max" };
     }
 
-    const cost = getLuckUpgradeCost(6, state.luckUpgrades.luckUpgrade2);
-    if (state.coins < cost) {
+    const cost = getLuckUpgradeCost(6, currentLuckUpgrades.luckUpgrade2);
+    if (currentCoins < cost) {
       return { state, actionName: "upgradeLuck2_skipped_insufficient" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - cost,
+        galaxyLuckUpgrades: {
+          ...state.galaxyLuckUpgrades,
+          luckUpgrade2: currentLuckUpgrades.luckUpgrade2 + 1,
+        },
+      };
+      return { state: newState, actionName: "upgradeLuck2" };
     }
 
     const newState = {
       ...state,
-      coins: state.coins - cost,
+      coins: currentCoins - cost,
       luckUpgrades: {
         ...state.luckUpgrades,
-        luckUpgrade2: state.luckUpgrades.luckUpgrade2 + 1,
+        luckUpgrade2: currentLuckUpgrades.luckUpgrade2 + 1,
       },
     };
 
     return { state: newState, actionName: "upgradeLuck2" };
   },
 
-  // Upgrade luck 3
+  // Upgrade luck 3 (area-aware)
   (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const currentLuckUpgrades = isGalaxy ? state.galaxyLuckUpgrades : state.luckUpgrades;
+
     const MAX_LUCK_LEVEL = 4;
-    if (state.luckUpgrades.luckUpgrade3 >= MAX_LUCK_LEVEL) {
+    if (currentLuckUpgrades.luckUpgrade3 >= MAX_LUCK_LEVEL) {
       return { state, actionName: "upgradeLuck3_skipped_max" };
     }
 
-    const cost = getLuckUpgradeCost(10, state.luckUpgrades.luckUpgrade3);
-    if (state.coins < cost) {
+    const cost = getLuckUpgradeCost(10, currentLuckUpgrades.luckUpgrade3);
+    if (currentCoins < cost) {
       return { state, actionName: "upgradeLuck3_skipped_insufficient" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - cost,
+        galaxyLuckUpgrades: {
+          ...state.galaxyLuckUpgrades,
+          luckUpgrade3: currentLuckUpgrades.luckUpgrade3 + 1,
+        },
+      };
+      return { state: newState, actionName: "upgradeLuck3" };
     }
 
     const newState = {
       ...state,
-      coins: state.coins - cost,
+      coins: currentCoins - cost,
       luckUpgrades: {
         ...state.luckUpgrades,
-        luckUpgrade3: state.luckUpgrades.luckUpgrade3 + 1,
+        luckUpgrade3: currentLuckUpgrades.luckUpgrade3 + 1,
       },
     };
 
     return { state: newState, actionName: "upgradeLuck3" };
   },
 
-  // Buy auto open
+  // Buy auto open (area-aware)
   (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const hasAutoOpen = isGalaxy ? state.galaxyHasAutoOpen : state.hasAutoOpen;
+
     const cost = 50;
-    if (state.hasAutoOpen || state.coins < cost) {
+    if (hasAutoOpen || currentCoins < cost) {
       return { state, actionName: "buyAutoOpen_skipped" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - cost,
+        galaxyHasAutoOpen: true,
+      };
+      return { state: newState, actionName: "buyAutoOpen" };
     }
 
     const newState = {
       ...state,
-      coins: state.coins - cost,
+      coins: currentCoins - cost,
       hasAutoOpen: true,
     };
 
     return { state: newState, actionName: "buyAutoOpen" };
   },
 
-  // Buy auto sell
+  // Buy auto sell (area-aware)
   (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const hasAutoSell = isGalaxy ? state.galaxyHasAutoSell : state.hasAutoSell;
+
     const cost = 25;
-    if (state.hasAutoSell || state.coins < cost) {
+    if (hasAutoSell || currentCoins < cost) {
       return { state, actionName: "buyAutoSell_skipped" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - cost,
+        galaxyHasAutoSell: true,
+      };
+      return { state: newState, actionName: "buyAutoSell" };
     }
 
     const newState = {
       ...state,
-      coins: state.coins - cost,
+      coins: currentCoins - cost,
       hasAutoSell: true,
     };
 
     return { state: newState, actionName: "buyAutoSell" };
   },
 
-  // Toggle auto sell rarity
+  // Toggle auto sell rarity (area-aware)
   (state) => {
-    if (!state.hasAutoSell) {
+    const isGalaxy = state.currentArea === 2;
+    const hasAutoSell = isGalaxy ? state.galaxyHasAutoSell : state.hasAutoSell;
+    const currentAutoSellRarities = isGalaxy ? state.galaxyAutoSellRarities : state.autoSellRarities;
+
+    if (!hasAutoSell) {
       return { state, actionName: "toggleAutoSell_skipped_noFeature" };
     }
 
     const rarities = Object.values(Rarity);
     const randomRarity = rarities[Math.floor(Math.random() * rarities.length)];
 
-    const newAutoSellRarities = new Set(state.autoSellRarities);
+    const newAutoSellRarities = new Set(currentAutoSellRarities);
     if (newAutoSellRarities.has(randomRarity)) {
       newAutoSellRarities.delete(randomRarity);
     } else {
       newAutoSellRarities.add(randomRarity);
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyAutoSellRarities: newAutoSellRarities,
+      };
+      return { state: newState, actionName: `toggleAutoSell_${randomRarity}` };
     }
 
     const newState = {
@@ -774,8 +1028,12 @@ const botActions: BotAction[] = [
     return { state: newState, actionName: `toggleAutoSell_${randomRarity}` };
   },
 
-  // Buy box upgrade
+  // Buy box upgrade (area-aware)
   (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const purchasedBoxes = isGalaxy ? state.galaxyPurchasedBoxes : state.purchasedBoxes;
+
     const boxes = [
       { id: "bronze", cost: 50 },
       { id: "silver", cost: 200 },
@@ -783,9 +1041,9 @@ const botActions: BotAction[] = [
     ];
 
     // Find next box to buy
-    const hasGold = state.purchasedBoxes.includes("gold");
-    const hasSilver = state.purchasedBoxes.includes("silver");
-    const hasBronze = state.purchasedBoxes.includes("bronze");
+    const hasGold = purchasedBoxes.includes("gold");
+    const hasSilver = purchasedBoxes.includes("silver");
+    const hasBronze = purchasedBoxes.includes("bronze");
 
     let boxToBuy: { id: string; cost: number } | null = null;
     if (!hasBronze && !hasSilver && !hasGold) {
@@ -796,13 +1054,22 @@ const botActions: BotAction[] = [
       boxToBuy = boxes[2];
     }
 
-    if (!boxToBuy || state.coins < boxToBuy.cost) {
+    if (!boxToBuy || currentCoins < boxToBuy.cost) {
       return { state, actionName: "buyBox_skipped" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - boxToBuy.cost,
+        galaxyPurchasedBoxes: [...state.galaxyPurchasedBoxes, boxToBuy.id],
+      };
+      return { state: newState, actionName: `buyBox_${boxToBuy.id}` };
     }
 
     const newState = {
       ...state,
-      coins: state.coins - boxToBuy.cost,
+      coins: currentCoins - boxToBuy.cost,
       purchasedBoxes: [...state.purchasedBoxes, boxToBuy.id],
     };
 
@@ -825,11 +1092,15 @@ const botActions: BotAction[] = [
     return { state: newState, actionName: "buyPets" };
   },
 
-  // Buy egg upgrade
+  // Buy egg upgrade (area-aware)
   (state) => {
     if (!state.hasPets) {
       return { state, actionName: "buyEggUpgrade_skipped_noPets" };
     }
+
+    const isGalaxy = state.currentArea === 2;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const currentEggUpgrades = isGalaxy ? state.galaxyEggUpgrades : state.eggUpgrades;
 
     const upgrades: {
       rarity: keyof typeof state.eggUpgrades;
@@ -844,16 +1115,28 @@ const botActions: BotAction[] = [
 
     // Find first unpurchased upgrade we can afford
     const upgrade = upgrades.find(
-      (u) => !state.eggUpgrades[u.rarity] && state.coins >= u.cost
+      (u) => !currentEggUpgrades[u.rarity] && currentCoins >= u.cost
     );
 
     if (!upgrade) {
       return { state, actionName: "buyEggUpgrade_skipped" };
     }
 
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins - upgrade.cost,
+        galaxyEggUpgrades: {
+          ...state.galaxyEggUpgrades,
+          [upgrade.rarity]: true,
+        },
+      };
+      return { state: newState, actionName: `buyEggUpgrade_${upgrade.rarity}` };
+    }
+
     const newState = {
       ...state,
-      coins: state.coins - upgrade.cost,
+      coins: currentCoins - upgrade.cost,
       eggUpgrades: {
         ...state.eggUpgrades,
         [upgrade.rarity]: true,
@@ -863,14 +1146,18 @@ const botActions: BotAction[] = [
     return { state: newState, actionName: `buyEggUpgrade_${upgrade.rarity}` };
   },
 
-  // Hatch egg
+  // Hatch egg (area-aware)
   (state) => {
-    if (state.eggs.length === 0) {
+    const isGalaxy = state.currentArea === 2;
+    const eggs = isGalaxy ? state.galaxyEggs : state.eggs;
+    const pets = isGalaxy ? state.galaxyPets : state.pets;
+
+    if (eggs.length === 0) {
       return { state, actionName: "hatchEgg_skipped_noEggs" };
     }
 
-    const randomIndex = Math.floor(Math.random() * state.eggs.length);
-    const egg = state.eggs[randomIndex];
+    const randomIndex = Math.floor(Math.random() * eggs.length);
+    const egg = eggs[randomIndex];
 
     const petType: "dog" | "cat" = Math.random() < 0.5 ? "dog" : "cat";
     const newPet = {
@@ -878,12 +1165,22 @@ const botActions: BotAction[] = [
       name: petType === "dog" ? "Dog" : "Cat",
       type: petType,
       rarity: egg.rarity,
+      bonus: generatePetBonus(petType, egg.rarity),
     };
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyEggs: state.galaxyEggs.filter((_, i) => i !== randomIndex),
+        galaxyPets: [...pets, newPet],
+      };
+      return { state: newState, actionName: "hatchEgg" };
+    }
 
     const newState = {
       ...state,
       eggs: state.eggs.filter((_, i) => i !== randomIndex),
-      pets: [...state.pets, newPet],
+      pets: [...pets, newPet],
     };
 
     return { state: newState, actionName: "hatchEgg" };
@@ -891,26 +1188,76 @@ const botActions: BotAction[] = [
 
   // Rebirth
   (state) => {
+    if (state.currentArea === 2) {
+      // Galaxy rebirth
+      const cost = getRebirthCost(state.galaxyRebirthCount);
+      if (state.galaxyCoins < cost) {
+        return { state, actionName: "rebirth_skipped_insufficient" };
+      }
+
+      const newState: BotGameState = {
+        ...state,
+        // Reset galaxy state
+        galaxyCoins: 0,
+        galaxyXp: 0,
+        galaxyLevel: 1,
+        galaxyInventory: [],
+        galaxyCoinGeneratorLevel: 0,
+        galaxyLuckUpgrades: { luckUpgrade1: 0, luckUpgrade2: 0, luckUpgrade3: 0 },
+        galaxyHasAutoOpen: false,
+        galaxyHasAutoSell: false,
+        galaxyAutoSellRarities: new Set(),
+        galaxyPurchasedBoxes: [],
+        galaxyDropsHistory: [],
+        galaxyEggUpgrades: { common: false, uncommon: false, rare: false, epic: false, legendary: false },
+        galaxyBattleWave: 1,
+        galaxyBattleSlots: [null, null, null, null, null],
+        // Increment galaxy rebirth
+        galaxyRebirthTokens: state.galaxyRebirthTokens + 1,
+        galaxyRebirthCount: state.galaxyRebirthCount + 1,
+      };
+      return { state: newState, actionName: "rebirth" };
+    }
+
+    // Normal rebirth (Area 1)
     const cost = getRebirthCost(state.rebirthCount);
     if (state.coins < cost) {
       return { state, actionName: "rebirth_skipped_insufficient" };
     }
 
     const newState: BotGameState = {
-      ...createInitialState(),
+      ...state,
+      // Reset area 1 state
+      level: 1,
+      xp: 0,
+      coins: 0,
+      inventory: [],
+      coinGeneratorLevel: 0,
+      luckUpgrades: { luckUpgrade1: 0, luckUpgrade2: 0, luckUpgrade3: 0 },
+      hasAutoOpen: false,
+      hasAutoSell: false,
+      autoSellRarities: new Set(),
+      purchasedBoxes: [],
+      dropsHistory: [],
+      eggUpgrades: { common: false, uncommon: false, rare: false, epic: false, legendary: false },
+      battleWave: 1,
+      battleSlots: [null, null, null, null, null],
+      battleStreak: 0,
+      eggs: [],
+      // Increment rebirth
       rebirthTokens: state.rebirthTokens + 1,
       rebirthCount: state.rebirthCount + 1,
-      hasPets: state.hasPets, // Keep pets feature
-      pets: state.pets, // Keep pets
-      eggs: [], // Reset eggs
-      battleStreak: 0, // Reset streak on rebirth
     };
 
     return { state: newState, actionName: "rebirth" };
   },
 
-  // Equip weapon to battle slot
+  // Equip weapon to battle slot (area-aware)
   (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const inventory = isGalaxy ? state.galaxyInventory : state.inventory;
+    const battleSlots = isGalaxy ? state.galaxyBattleSlots : state.battleSlots;
+
     const weaponCategories = [
       ItemCategory.Pistol,
       ItemCategory.Rifle,
@@ -922,7 +1269,7 @@ const botActions: BotAction[] = [
       ItemCategory.Shield,
     ];
 
-    const weapons = state.inventory.filter((item) =>
+    const weapons = inventory.filter((item) =>
       weaponCategories.includes(item.category)
     );
 
@@ -934,10 +1281,18 @@ const botActions: BotAction[] = [
     const randomWeapon = weapons[Math.floor(Math.random() * weapons.length)];
 
     // Remove from old slot if already equipped elsewhere
-    const newSlots = state.battleSlots.map((slotId) =>
+    const newSlots = battleSlots.map((slotId) =>
       slotId === randomWeapon.id ? null : slotId
     );
     newSlots[randomSlot] = randomWeapon.id;
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyBattleSlots: newSlots,
+      };
+      return { state: newState, actionName: `equipWeapon_slot${randomSlot}` };
+    }
 
     const newState = {
       ...state,
@@ -947,18 +1302,25 @@ const botActions: BotAction[] = [
     return { state: newState, actionName: `equipWeapon_slot${randomSlot}` };
   },
 
-  // Fight battle
+  // Fight battle (area-aware)
   (state) => {
-    const filledSlots = state.battleSlots.filter((s) => s !== null).length;
+    const isGalaxy = state.currentArea === 2;
+    const inventory = isGalaxy ? state.galaxyInventory : state.inventory;
+    const battleSlots = isGalaxy ? state.galaxyBattleSlots : state.battleSlots;
+    const battleWave = isGalaxy ? state.galaxyBattleWave : state.battleWave;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const rebirthCount = isGalaxy ? state.galaxyRebirthCount : state.rebirthCount;
+
+    const filledSlots = battleSlots.filter((s) => s !== null).length;
     if (filledSlots === 0) {
       return { state, actionName: "battle_skipped_noWeapons" };
     }
 
     // Calculate shield reduction
     let totalShieldReduction = 0;
-    for (const slotId of state.battleSlots) {
+    for (const slotId of battleSlots) {
       if (slotId) {
-        const item = state.inventory.find((it) => it.id === slotId);
+        const item = inventory.find((it) => it.id === slotId);
         if (item && item.category === ItemCategory.Shield) {
           totalShieldReduction += Math.abs(getWeaponPower(item));
         }
@@ -967,12 +1329,12 @@ const botActions: BotAction[] = [
 
     let wins = 0;
     for (let i = 0; i < 5; i++) {
-      const slotId = state.battleSlots[i];
+      const slotId = battleSlots[i];
       const item = slotId
-        ? state.inventory.find((it) => it.id === slotId)
+        ? inventory.find((it) => it.id === slotId)
         : null;
       const rawPower = item ? getWeaponPower(item) : 0;
-      const baseEnemyPower = generateEnemyPower(state.battleWave, i);
+      const baseEnemyPower = generateEnemyPower(battleWave, i);
       const enemyPowerAfterShield = Math.max(
         0,
         baseEnemyPower - totalShieldReduction
@@ -991,11 +1353,11 @@ const botActions: BotAction[] = [
 
     if (won) {
       // Scale rewards with wave: base 5 + wave number
-      let baseCoins = 5 + state.battleWave;
+      let baseCoins = 5 + battleWave;
 
       // Early wave bonus to encourage new players (waves 1-3 get extra coins)
-      if (state.battleWave <= 3) {
-        const earlyWaveBonus = (4 - state.battleWave) * 3; // Wave 1: +9, Wave 2: +6, Wave 3: +3
+      if (battleWave <= 3) {
+        const earlyWaveBonus = (4 - battleWave) * 3; // Wave 1: +9, Wave 2: +6, Wave 3: +3
         baseCoins += earlyWaveBonus;
       }
 
@@ -1004,38 +1366,47 @@ const botActions: BotAction[] = [
       const streakBonus = Math.min(newStreak * 0.10, 1.0);
 
       // Rebirth bonus
-      const rebirthBonus = state.rebirthCount * 0.1;
+      const rebirthBonus = rebirthCount * 0.1;
 
       // Calculate total coins
       const earnedCoins = baseCoins * (1 + rebirthBonus) * (1 + streakBonus);
 
-      const newState = {
-        ...state,
-        coins: state.coins + earnedCoins,
-        battleWave: state.battleWave + 1,
-        battleStreak: newStreak,
-      };
-
       // Chance to drop a guaranteed rare+ item (20% base, +2% per wave, max 50%)
-      const dropChance = Math.min(0.20 + (state.battleWave * 0.02), 0.50);
+      const dropChance = Math.min(0.20 + (battleWave * 0.02), 0.50);
+      let battleDrop: LootItem | null = null;
       if (Math.random() < dropChance) {
         const rarityRoll = Math.random();
         let dropRarity: Rarity;
-        if (state.battleWave >= 10 && rarityRoll < 0.10) {
+        if (battleWave >= 10 && rarityRoll < 0.10) {
           dropRarity = Rarity.Legendary;
-        } else if (state.battleWave >= 5 && rarityRoll < 0.30) {
+        } else if (battleWave >= 5 && rarityRoll < 0.30) {
           dropRarity = Rarity.Epic;
         } else {
           dropRarity = Rarity.Rare;
         }
-
-        const battleDrop = generateLootWithGuaranteedRarity(dropRarity);
-        if (battleDrop) {
-          newState.inventory = [...newState.inventory, battleDrop];
-          newState.dropsHistory = [battleDrop, ...newState.dropsHistory].slice(0, 1000);
-        }
+        battleDrop = generateLootWithGuaranteedRarity(dropRarity);
       }
 
+      if (isGalaxy) {
+        const newState = {
+          ...state,
+          galaxyCoins: currentCoins + earnedCoins,
+          galaxyBattleWave: battleWave + 1,
+          battleStreak: newStreak,
+          galaxyInventory: battleDrop ? [...state.galaxyInventory, battleDrop] : state.galaxyInventory,
+          galaxyDropsHistory: battleDrop ? [battleDrop, ...state.galaxyDropsHistory].slice(0, 1000) : state.galaxyDropsHistory,
+        };
+        return { state: newState, actionName: "battle_won" };
+      }
+
+      const newState = {
+        ...state,
+        coins: currentCoins + earnedCoins,
+        battleWave: battleWave + 1,
+        battleStreak: newStreak,
+        inventory: battleDrop ? [...state.inventory, battleDrop] : state.inventory,
+        dropsHistory: battleDrop ? [battleDrop, ...state.dropsHistory].slice(0, 1000) : state.dropsHistory,
+      };
       return { state: newState, actionName: "battle_won" };
     } else {
       // Lost - reset streak
@@ -1047,16 +1418,21 @@ const botActions: BotAction[] = [
     }
   },
 
-  // Bulk sell by rarity
+  // Bulk sell by rarity (area-aware)
   (state) => {
-    if (state.inventory.length === 0) {
+    const isGalaxy = state.currentArea === 2;
+    const inventory = isGalaxy ? state.galaxyInventory : state.inventory;
+    const currentCoins = isGalaxy ? state.galaxyCoins : state.coins;
+    const battleSlots = isGalaxy ? state.galaxyBattleSlots : state.battleSlots;
+
+    if (inventory.length === 0) {
       return { state, actionName: "bulkSell_skipped_empty" };
     }
 
     const rarities = Object.values(Rarity);
     const randomRarity = rarities[Math.floor(Math.random() * rarities.length)];
 
-    const itemsToSell = state.inventory.filter(
+    const itemsToSell = inventory.filter(
       (item) => item.rarity === randomRarity
     );
     if (itemsToSell.length === 0) {
@@ -1070,13 +1446,26 @@ const botActions: BotAction[] = [
     const idsToSell = new Set(itemsToSell.map((i) => i.id));
 
     // Remove from battle slots
-    const newBattleSlots = state.battleSlots.map((slotId) =>
+    const newBattleSlots = battleSlots.map((slotId) =>
       slotId && idsToSell.has(slotId) ? null : slotId
     );
 
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyCoins: currentCoins + totalValue,
+        galaxyInventory: state.galaxyInventory.filter((item) => !idsToSell.has(item.id)),
+        galaxyBattleSlots: newBattleSlots,
+      };
+      return {
+        state: newState,
+        actionName: `bulkSell_${randomRarity}_${itemsToSell.length}items`,
+      };
+    }
+
     const newState = {
       ...state,
-      coins: state.coins + totalValue,
+      coins: currentCoins + totalValue,
       inventory: state.inventory.filter((item) => !idsToSell.has(item.id)),
       battleSlots: newBattleSlots,
     };
@@ -1089,13 +1478,29 @@ const botActions: BotAction[] = [
 
   // Simulate idle coin generation (1 second worth)
   (state) => {
+    if (state.currentArea === 2) {
+      if (state.galaxyCoinGeneratorLevel <= 0) {
+        return { state, actionName: "idleCoins_skipped_noGenerator" };
+      }
+      const baseCoinsPerSecond = state.galaxyCoinGeneratorLevel * 0.01;
+      const rebirthBonus = state.galaxyRebirthCount * 0.1;
+      const prestigeBonus = state.galaxyPrestigeCount * 1.0;
+      const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus + prestigeBonus);
+      const newState = {
+        ...state,
+        galaxyCoins: state.galaxyCoins + coinsPerSecond,
+      };
+      return { state: newState, actionName: "idleCoins" };
+    }
+
     if (state.coinGeneratorLevel <= 0) {
       return { state, actionName: "idleCoins_skipped_noGenerator" };
     }
 
     const baseCoinsPerSecond = state.coinGeneratorLevel * 0.01;
     const rebirthBonus = state.rebirthCount * 0.1;
-    const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus);
+    const prestigeBonus = state.prestigeCount * 1.0;
+    const coinsPerSecond = baseCoinsPerSecond * (1 + rebirthBonus + prestigeBonus);
 
     const newState = {
       ...state,
@@ -1103,6 +1508,211 @@ const botActions: BotAction[] = [
     };
 
     return { state: newState, actionName: "idleCoins" };
+  },
+
+  // Switch area (Area 1 <-> Area 2 Galaxy)
+  (state) => {
+    // Can only go to Galaxy if prestige count >= 1
+    if (state.currentArea === 1 && state.prestigeCount < 1) {
+      return { state, actionName: "switchArea_skipped_noPrestige" };
+    }
+
+    const newArea = state.currentArea === 1 ? 2 : 1;
+    const newState = {
+      ...state,
+      currentArea: newArea,
+    };
+
+    return { state: newState, actionName: `switchArea_to${newArea}` };
+  },
+
+  // Prestige
+  (state) => {
+    if (state.currentArea === 2) {
+      // Galaxy prestige - costs galaxy rebirth tokens
+      const cost = 5 * (state.galaxyPrestigeCount + 1);
+      if (state.galaxyRebirthTokens < cost) {
+        return { state, actionName: "prestige_skipped_insufficient" };
+      }
+
+      const newState: BotGameState = {
+        ...state,
+        // Reset galaxy rebirth tokens/count
+        galaxyRebirthTokens: 0,
+        galaxyRebirthCount: 0,
+        // Reset galaxy state
+        galaxyCoins: 0,
+        galaxyXp: 0,
+        galaxyLevel: 1,
+        galaxyInventory: [],
+        galaxyCoinGeneratorLevel: 0,
+        galaxyLuckUpgrades: { luckUpgrade1: 0, luckUpgrade2: 0, luckUpgrade3: 0 },
+        galaxyHasAutoOpen: false,
+        galaxyHasAutoSell: false,
+        galaxyAutoSellRarities: new Set(),
+        galaxyPurchasedBoxes: [],
+        galaxyDropsHistory: [],
+        galaxyEggUpgrades: { common: false, uncommon: false, rare: false, epic: false, legendary: false },
+        galaxyBattleWave: 1,
+        galaxyBattleSlots: [null, null, null, null, null],
+        galaxyEquippedPets: [],
+        // Increment galaxy prestige
+        galaxyPrestigeCount: state.galaxyPrestigeCount + 1,
+      };
+      return { state: newState, actionName: "prestige" };
+    }
+
+    // Normal prestige (Area 1) - costs rebirth tokens
+    const cost = 5 * (state.prestigeCount + 1);
+    if (state.rebirthTokens < cost) {
+      return { state, actionName: "prestige_skipped_insufficient" };
+    }
+
+    const newState: BotGameState = {
+      ...state,
+      // Reset rebirth tokens/count
+      rebirthTokens: 0,
+      rebirthCount: 0,
+      // Reset area 1 state
+      level: 1,
+      xp: 0,
+      coins: 0,
+      inventory: [],
+      coinGeneratorLevel: 0,
+      luckUpgrades: { luckUpgrade1: 0, luckUpgrade2: 0, luckUpgrade3: 0 },
+      hasAutoOpen: false,
+      hasAutoSell: false,
+      autoSellRarities: new Set(),
+      purchasedBoxes: [],
+      dropsHistory: [],
+      eggUpgrades: { common: false, uncommon: false, rare: false, epic: false, legendary: false },
+      battleWave: 1,
+      battleSlots: [null, null, null, null, null],
+      battleStreak: 0,
+      eggs: [],
+      equippedPets: [],
+      // Increment prestige
+      prestigeCount: state.prestigeCount + 1,
+    };
+
+    return { state: newState, actionName: "prestige" };
+  },
+
+  // Merge 3 items of same rarity into 1 of higher rarity
+  (state) => {
+    const isGalaxy = state.currentArea === 2;
+    const inventory = isGalaxy ? state.galaxyInventory : state.inventory;
+    const battleSlots = isGalaxy ? state.galaxyBattleSlots : state.battleSlots;
+
+    if (inventory.length < 3) {
+      return { state, actionName: "mergeItems_skipped_notEnough" };
+    }
+
+    // Group items by rarity (exclude items in battle slots)
+    const battleSlotIds = new Set(battleSlots.filter(Boolean) as string[]);
+    const byRarity: Record<string, LootItem[]> = {};
+    for (const item of inventory) {
+      if (item.rarity !== Rarity.Legendary && !battleSlotIds.has(item.id)) { // Can't merge legendaries or equipped items
+        if (!byRarity[item.rarity]) byRarity[item.rarity] = [];
+        byRarity[item.rarity].push(item);
+      }
+    }
+
+    // Find a rarity with 3+ items
+    const mergeableRarity = Object.entries(byRarity).find(([_, items]) => items.length >= 3);
+    if (!mergeableRarity) {
+      return { state, actionName: "mergeItems_skipped_noTriples" };
+    }
+
+    const [rarity, items] = mergeableRarity;
+    const itemsToMerge = items.slice(0, 3);
+    const idsToRemove = new Set(itemsToMerge.map(i => i.id));
+
+    // Get next rarity
+    const rarityOrder = [Rarity.Common, Rarity.Uncommon, Rarity.Rare, Rarity.Epic, Rarity.Legendary];
+    const currentIndex = rarityOrder.indexOf(rarity as Rarity);
+    const nextRarity = rarityOrder[currentIndex + 1];
+
+    const newItem = generateLootWithGuaranteedRarity(nextRarity);
+    if (!newItem) {
+      return { state, actionName: "mergeItems_failed" };
+    }
+
+    if (isGalaxy) {
+      const newState = {
+        ...state,
+        galaxyInventory: [...state.galaxyInventory.filter(i => !idsToRemove.has(i.id)), newItem],
+        galaxyDropsHistory: [newItem, ...state.galaxyDropsHistory].slice(0, 1000),
+      };
+      return { state: newState, actionName: `mergeItems_${rarity}` };
+    }
+
+    const newState = {
+      ...state,
+      inventory: [...state.inventory.filter(i => !idsToRemove.has(i.id)), newItem],
+      dropsHistory: [newItem, ...state.dropsHistory].slice(0, 1000),
+    };
+
+    return { state: newState, actionName: `mergeItems_${rarity}` };
+  },
+
+  // Equip pet
+  (state) => {
+    const pets = state.currentArea === 2 ? state.galaxyPets : state.pets;
+    const equippedPets = state.currentArea === 2 ? state.galaxyEquippedPets : state.equippedPets;
+
+    if (pets.length === 0) {
+      return { state, actionName: "equipPet_skipped_noPets" };
+    }
+
+    // Find a pet that's not already equipped
+    const unequippedPets = pets.filter(p => !equippedPets.includes(p.id));
+    if (unequippedPets.length === 0 || equippedPets.length >= 6) {
+      return { state, actionName: "equipPet_skipped_allEquipped" };
+    }
+
+    const petToEquip = unequippedPets[Math.floor(Math.random() * unequippedPets.length)];
+
+    if (state.currentArea === 2) {
+      const newState = {
+        ...state,
+        galaxyEquippedPets: [...state.galaxyEquippedPets, petToEquip.id],
+      };
+      return { state: newState, actionName: "equipPet" };
+    }
+
+    const newState = {
+      ...state,
+      equippedPets: [...state.equippedPets, petToEquip.id],
+    };
+
+    return { state: newState, actionName: "equipPet" };
+  },
+
+  // Unequip pet
+  (state) => {
+    const equippedPets = state.currentArea === 2 ? state.galaxyEquippedPets : state.equippedPets;
+
+    if (equippedPets.length === 0) {
+      return { state, actionName: "unequipPet_skipped_noneEquipped" };
+    }
+
+    const randomIndex = Math.floor(Math.random() * equippedPets.length);
+
+    if (state.currentArea === 2) {
+      const newState = {
+        ...state,
+        galaxyEquippedPets: state.galaxyEquippedPets.filter((_, i) => i !== randomIndex),
+      };
+      return { state: newState, actionName: "unequipPet" };
+    }
+
+    const newState = {
+      ...state,
+      equippedPets: state.equippedPets.filter((_, i) => i !== randomIndex),
+    };
+
+    return { state: newState, actionName: "unequipPet" };
   },
 ];
 
@@ -1292,12 +1902,51 @@ export function generateTestReport(results: TestResult[]): string {
     results.reduce((sum, r) => sum + r.finalState.rebirthCount, 0) /
     results.length;
 
+  const avgPrestige =
+    results.reduce((sum, r) => sum + r.finalState.prestigeCount, 0) /
+    results.length;
+  const avgPets =
+    results.reduce((sum, r) => sum + r.finalState.pets.length, 0) /
+    results.length;
+  const avgEquippedPets =
+    results.reduce((sum, r) => sum + r.finalState.equippedPets.length, 0) /
+    results.length;
+
   lines.push(`Average level: ${avgLevel.toFixed(1)}`);
   lines.push(`Average coins: ${avgCoins.toFixed(2)}`);
   lines.push(`Average inventory size: ${avgInventory.toFixed(0)}`);
   lines.push(`Average chests opened: ${avgChestsOpened.toFixed(0)}`);
   lines.push(`Average rebirths: ${avgRebirths.toFixed(2)}`);
+  lines.push(`Average prestiges: ${avgPrestige.toFixed(2)}`);
+  lines.push(`Average pets: ${avgPets.toFixed(1)}`);
+  lines.push(`Average equipped pets: ${avgEquippedPets.toFixed(1)}`);
   lines.push("");
+
+  // Galaxy statistics
+  const botsInGalaxy = results.filter(r => r.finalState.currentArea === 2).length;
+  const avgGalaxyCoins =
+    results.reduce((sum, r) => sum + r.finalState.galaxyCoins, 0) /
+    results.length;
+  const avgGalaxyLevel =
+    results.reduce((sum, r) => sum + r.finalState.galaxyLevel, 0) /
+    results.length;
+  const avgGalaxyRebirths =
+    results.reduce((sum, r) => sum + r.finalState.galaxyRebirthCount, 0) /
+    results.length;
+  const avgGalaxyPrestige =
+    results.reduce((sum, r) => sum + r.finalState.galaxyPrestigeCount, 0) /
+    results.length;
+
+  if (avgGalaxyCoins > 0 || avgGalaxyRebirths > 0 || botsInGalaxy > 0) {
+    lines.push("GALAXY AREA STATISTICS");
+    lines.push("-".repeat(40));
+    lines.push(`Bots in galaxy area: ${botsInGalaxy}/${results.length}`);
+    lines.push(`Average galaxy level: ${avgGalaxyLevel.toFixed(1)}`);
+    lines.push(`Average galaxy coins: ${avgGalaxyCoins.toFixed(2)}`);
+    lines.push(`Average galaxy rebirths: ${avgGalaxyRebirths.toFixed(2)}`);
+    lines.push(`Average galaxy prestiges: ${avgGalaxyPrestige.toFixed(2)}`);
+    lines.push("");
+  }
 
   // Battle statistics
   const totalBattleWins = allActions["battle_won"] || 0;
@@ -1347,7 +1996,7 @@ declare const process: { argv: string[] } | undefined;
 if (typeof process !== "undefined" && process?.argv) {
   const args = process.argv.slice(2);
   const numBots = parseInt(args[0]) || 5;
-  const actionsPerBot = parseInt(args[1]) || 1000;
+  const actionsPerBot = parseInt(args[1]) || 5000;
   const verbose = args.includes("--verbose") || args.includes("-v");
   const battleMode = args.includes("--battle-mode");
 
